@@ -29,13 +29,30 @@ struct TreemapCanvas: NSViewRepresentable {
     }
 }
 
+private struct MouseDownTarget {
+    var nodeID: NodeID
+    var rootID: NodeID?
+    var point: CGPoint
+
+    func distance(to other: CGPoint) -> CGFloat {
+        let dx = point.x - other.x
+        let dy = point.y - other.y
+        return sqrt(dx * dx + dy * dy)
+    }
+}
+
 final class TreemapNSView: NSView {
     var snapshot: FileTreeSnapshot? {
         didSet { needsDisplay = true }
     }
 
     var rootID: NodeID? {
-        didSet { needsDisplay = true }
+        didSet {
+            if rootID != oldValue {
+                pendingDoubleClickTarget = nil
+            }
+            needsDisplay = true
+        }
     }
 
     var expandedNodeIDs: Set<NodeID> = [] {
@@ -81,6 +98,8 @@ final class TreemapNSView: NSView {
     )
     private let hitTester = TreemapHitTester(gapTolerance: 1)
     private let labelPolicy = TreemapLabelPolicy()
+    private let doubleClickTargetTolerance: CGFloat = 6
+    private var pendingDoubleClickTarget: MouseDownTarget?
 
     override var isFlipped: Bool { true }
     override var acceptsFirstResponder: Bool { true }
@@ -144,11 +163,19 @@ final class TreemapNSView: NSView {
         window?.makeFirstResponder(self)
         let point = convert(event.locationInWindow, from: nil)
         let hit = hitTester.hitTest(point: point, tiles: renderedTiles)
-        onSelect?(hit?.nodeID)
 
-        if event.clickCount == 2, let hit, hit.nodeID != syntheticOtherNodeID {
-            onActivate?(hit.nodeID)
+        if event.clickCount == 2 {
+            let targetID = doubleClickTarget(at: point, fallback: hit?.nodeID)
+            onSelect?(targetID)
+            if let targetID, targetID != syntheticOtherNodeID {
+                onActivate?(targetID)
+            }
+            pendingDoubleClickTarget = nil
+            return
         }
+
+        onSelect?(hit?.nodeID)
+        pendingDoubleClickTarget = hit.map { MouseDownTarget(nodeID: $0.nodeID, rootID: rootID, point: point) }
     }
 
     override func mouseMoved(with event: NSEvent) {
@@ -166,6 +193,15 @@ final class TreemapNSView: NSView {
             return
         }
         super.keyDown(with: event)
+    }
+
+    private func doubleClickTarget(at point: CGPoint, fallback nodeID: NodeID?) -> NodeID? {
+        guard let pendingDoubleClickTarget,
+              pendingDoubleClickTarget.rootID == rootID,
+              pendingDoubleClickTarget.distance(to: point) <= doubleClickTargetTolerance else {
+            return nodeID
+        }
+        return pendingDoubleClickTarget.nodeID
     }
 
     private func draw(_ tile: Tile, in context: CGContext) {
