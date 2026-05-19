@@ -18,15 +18,18 @@
 
 ## v0.2 Usable Explorer
 
-- [ ] Sidebar scan sources
-- [ ] Permission issue summary view
+- [x] Sidebar scan sources
+- [x] Permission issue summary view
 - [x] Reveal in Finder
 - [x] Copy Path
-- [ ] Quick Look
-- [ ] File type color mapping
-- [ ] Better labels and text fitting
-- [ ] Light/dark/high-contrast polish
+- [x] Quick Look
+- [x] File type color mapping
+- [x] Better labels and text fitting
+- [x] Light/dark/high-contrast polish
 - [x] Other small files behavior review
+- [x] Recursive SpaceSniffer-style treemap depth
+- [x] Readability-first visual weighting
+- [x] Compatible Liquid Glass sidebar and inspector
 
 ## v0.3 Safe Actions
 

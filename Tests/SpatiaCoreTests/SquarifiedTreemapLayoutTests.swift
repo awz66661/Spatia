@@ -53,4 +53,37 @@ final class SquarifiedTreemapLayoutTests: XCTestCase {
 
         XCTAssertEqual(tiles.first { $0.nodeID == syntheticOtherNodeID }?.size, 60)
     }
+
+    func testReadableWeightKeepsTileSizeAsActualBytesAndMonotonicArea() {
+        let layout = SquarifiedTreemapLayout(
+            minTileArea: 0,
+            maxItems: 10,
+            contentPadding: 0,
+            readableWeightExponent: 0.88,
+            orientationPolicy: .spaceSniffer
+        )
+        let tiles = layout.layout(
+            items: [
+                TreemapInput(nodeID: 0, label: "Large", size: 10_000, kind: .file),
+                TreemapInput(nodeID: 1, label: "Small", size: 100, kind: .file)
+            ],
+            in: CGRect(x: 0, y: 0, width: 300, height: 180)
+        )
+
+        let large = try! XCTUnwrap(tiles.first { $0.nodeID == 0 })
+        let small = try! XCTUnwrap(tiles.first { $0.nodeID == 1 })
+
+        XCTAssertEqual(large.size, 10_000)
+        XCTAssertEqual(small.size, 100)
+        XCTAssertGreaterThan(large.rect.width * large.rect.height, small.rect.width * small.rect.height)
+        XCTAssertGreaterThan(layout.layoutWeight(for: 10_000), layout.layoutWeight(for: 100))
+    }
+
+    func testSpaceSnifferOrientationPolicyAlternatesDirection() {
+        let policy = TreemapOrientationPolicy.spaceSniffer
+
+        XCTAssertEqual(policy.flow(for: CGRect(x: 0, y: 0, width: 400, height: 200), depth: 0), .columns)
+        XCTAssertEqual(policy.flow(for: CGRect(x: 0, y: 0, width: 400, height: 200), depth: 1), .rows)
+        XCTAssertEqual(policy.flow(for: CGRect(x: 0, y: 0, width: 200, height: 400), depth: 0), .rows)
+    }
 }

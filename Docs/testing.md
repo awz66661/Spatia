@@ -6,8 +6,13 @@ Current tests cover:
 
 - squarified treemap bounds behavior
 - small item grouping
+- readability-first layout weighting
+- SpaceSniffer-style orientation policy
+- recursive parent/child tile containment
+- file category classification
 - treemap hit testing
 - scanner aggregation and options
+- scanner type identifier fallback
 - package and symlink behavior
 - deletion safety policy basics
 
@@ -35,6 +40,9 @@ Treemap:
 - area conservation
 - no negative dimensions
 - small file grouping
+- readable visual weights while preserving actual byte labels
+- recursive tile containment
+- orientation policy for wide/tall canvases and nested depth
 - deterministic ordering
 - hit testing
 

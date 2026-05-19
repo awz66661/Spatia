@@ -7,19 +7,22 @@ public struct TreemapInput: Hashable, Sendable {
     public var size: Int64
     public var kind: NodeKind
     public var flags: NodeFlags
+    public var category: FileCategory
 
     public init(
         nodeID: NodeID,
         label: String,
         size: Int64,
         kind: NodeKind,
-        flags: NodeFlags = []
+        flags: NodeFlags = [],
+        category: FileCategory = .other
     ) {
         self.nodeID = nodeID
         self.label = label
         self.size = size
         self.kind = kind
         self.flags = flags
+        self.category = category
     }
 }
 
@@ -31,6 +34,7 @@ public struct Tile: Hashable, Sendable {
     public var size: Int64
     public var kind: NodeKind
     public var flags: NodeFlags
+    public var category: FileCategory
 
     public init(
         nodeID: NodeID,
@@ -39,7 +43,8 @@ public struct Tile: Hashable, Sendable {
         label: String,
         size: Int64,
         kind: NodeKind,
-        flags: NodeFlags = []
+        flags: NodeFlags = [],
+        category: FileCategory = .other
     ) {
         self.nodeID = nodeID
         self.rect = rect
@@ -48,5 +53,6 @@ public struct Tile: Hashable, Sendable {
         self.size = size
         self.kind = kind
         self.flags = flags
+        self.category = category
     }
 }

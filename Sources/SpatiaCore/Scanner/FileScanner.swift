@@ -1,4 +1,5 @@
 import Foundation
+import UniformTypeIdentifiers
 
 public struct ScanOptions: Sendable {
     public var expandPackages: Bool
@@ -148,6 +149,7 @@ private struct FileTreeBuilder {
                 url: url,
                 kind: kind,
                 flags: flags,
+                typeIdentifier: typeIdentifier(for: url),
                 logicalSize: fileLogicalSize(values),
                 allocatedSize: fileAllocatedSize(values),
                 modifiedAt: values?.contentModificationDate,
@@ -256,6 +258,16 @@ private struct FileTreeBuilder {
 
     private func resourceValues(for url: URL) -> URLResourceValues? {
         try? url.resourceValues(forKeys: resourceKeys)
+    }
+
+    private func typeIdentifier(for url: URL) -> String? {
+        if let typeIdentifier = try? url.resourceValues(forKeys: [.typeIdentifierKey]).typeIdentifier {
+            return typeIdentifier
+        }
+
+        let pathExtension = url.pathExtension
+        guard !pathExtension.isEmpty else { return nil }
+        return UTType(filenameExtension: pathExtension)?.identifier
     }
 
     private func nodeKind(for values: URLResourceValues?) -> NodeKind {

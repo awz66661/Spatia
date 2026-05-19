@@ -9,6 +9,7 @@ final class AppModel: ObservableObject {
     @Published var displayRootID: NodeID?
     @Published var isScanning = false
     @Published var statusText = "Choose a folder to scan."
+    @Published var currentScanURL: URL?
 
     private var scanTask: Task<Void, Never>?
 
@@ -40,10 +41,11 @@ final class AppModel: ObservableObject {
                 TreemapInput(
                     nodeID: root.id,
                     label: root.name,
-                    size: root.allocatedSize,
-                    kind: root.kind,
-                    flags: root.flags
-                )
+                size: root.allocatedSize,
+                kind: root.kind,
+                flags: root.flags,
+                category: FileCategoryClassifier.category(for: root)
+            )
             ]
         }
 
@@ -53,7 +55,8 @@ final class AppModel: ObservableObject {
                 label: $0.name,
                 size: $0.allocatedSize,
                 kind: $0.kind,
-                flags: $0.flags
+                flags: $0.flags,
+                category: FileCategoryClassifier.category(for: $0)
             )
         }
     }
@@ -63,10 +66,35 @@ final class AppModel: ObservableObject {
         return snapshot.breadcrumb(for: displayRoot.id)
     }
 
+    var permissionIssues: [ScanIssue] {
+        result?.issues ?? []
+    }
+
+    var canQuickLookSelected: Bool {
+        guard let selectedNode, selectedNode.id != syntheticOtherNodeID else { return false }
+        return selectedNode.kind == .file && selectedNode.url != nil
+    }
+
     func scanDownloads() {
         let downloads = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Downloads", isDirectory: true)
         scan(downloads)
+    }
+
+    func scanDesktop() {
+        let desktop = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Desktop", isDirectory: true)
+        scan(desktop)
+    }
+
+    func scanDocuments() {
+        let documents = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Documents", isDirectory: true)
+        scan(documents)
+    }
+
+    func scanApplications() {
+        scan(URL(fileURLWithPath: "/Applications", isDirectory: true))
     }
 
     func scanHome() {
@@ -89,6 +117,7 @@ final class AppModel: ObservableObject {
         isScanning = true
         selectedID = nil
         displayRootID = nil
+        currentScanURL = url
         statusText = "Scanning \(url.lastPathComponent.isEmpty ? url.path : url.lastPathComponent)..."
 
         scanTask = Task {
@@ -121,6 +150,16 @@ final class AppModel: ObservableObject {
         guard node.kind == .directory || node.kind == .package || node.kind == .volume else { return }
         displayRootID = node.id
         selectedID = nil
+    }
+
+    func quickLookSelected() {
+        guard let selectedID else { return }
+        quickLook(selectedID)
+    }
+
+    func quickLook(_ id: NodeID) {
+        guard id != syntheticOtherNodeID, let node = snapshot?[id], node.kind == .file, let url = node.url else { return }
+        MacActions.quickLook(url)
     }
 
     func goUp() {

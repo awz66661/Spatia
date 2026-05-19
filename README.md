@@ -22,10 +22,12 @@ Spatia is not a cleaner, optimizer, or automatic deletion tool. It starts as a v
 This repository is initialized as a Swift Package with:
 
 - `Spatia`: native macOS app target
-- `SpatiaCore`: scanner, data model, treemap layout, and safety policy
-- `SpatiaCoreTests`: focused unit tests for layout and deletion safety rules
+- `SpatiaCore`: scanner, data model, recursive treemap layout, file categories, and safety policy
+- `SpatiaCoreTests`: focused unit tests for scanner fixtures, treemap behavior, categories, hit testing, and safety rules
 - `Docs`: product, architecture, permissions, roadmap, testing, and release notes
 - `Scripts`: local environment check, build, test, and GitHub Release packaging helpers
+
+The current explorer build includes common scan sources, a compatible glass sidebar and inspector, recursive SpaceSniffer-style treemap rendering, Quick Look, Reveal in Finder, Copy Path, and a consolidated permission issue summary.
 
 ## Local Development
 

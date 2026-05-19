@@ -24,6 +24,10 @@ Spatia
 - `SpatiaCore` is a platform-light library for scanner, model, layout, formatting, and safety rules.
 - `TreemapCanvas` bridges SwiftUI to an AppKit `NSView`.
 - The treemap is drawn as one CoreGraphics canvas, not as thousands of SwiftUI views.
+- `RecursiveTreemapBuilder` builds 2-3 visible levels from a `FileTreeSnapshot`.
+- `SquarifiedTreemapLayout` supports readability-first weighting and a SpaceSniffer-style alternating orientation policy.
+- `FileCategoryClassifier` maps scanner metadata, UTType hints, extensions, and protected paths into stable visual categories.
+- `GlassPanel` uses `NSGlassEffectView` on macOS 26+ and falls back to `NSVisualEffectView` on macOS 14/15.
 
 ## Planned Production Shape
 
@@ -42,7 +46,8 @@ SwiftUI shell
 User chooses source
   -> FileScanner scans selected directory
   -> FileTreeSnapshot stores nodes and aggregate sizes
-  -> SquarifiedTreemapLayout converts visible children into tiles
+  -> RecursiveTreemapBuilder chooses visible depth and child containment
+  -> SquarifiedTreemapLayout converts siblings into readable-weighted tiles
   -> TreemapNSView draws tiles and handles hit testing
   -> Inspector reads selected FileNode
 ```
@@ -51,5 +56,5 @@ User chooses source
 
 - Replace one-shot scanning with progressive scan events.
 - Move scan aggregation into an actor when progressive updates start.
-- Add a render cache once nested depth rendering is introduced.
+- Add a render cache if nested redraw cost becomes visible during large scans.
 - Add package expansion as an explicit user action.

@@ -9,6 +9,7 @@ public struct FileNode: Identifiable, Hashable, Sendable {
 
     public var kind: NodeKind
     public var flags: NodeFlags
+    public var typeIdentifier: String?
 
     public var logicalSize: Int64
     public var allocatedSize: Int64
@@ -25,6 +26,7 @@ public struct FileNode: Identifiable, Hashable, Sendable {
         url: URL?,
         kind: NodeKind,
         flags: NodeFlags = [],
+        typeIdentifier: String? = nil,
         logicalSize: Int64 = 0,
         allocatedSize: Int64 = 0,
         modifiedAt: Date? = nil,
@@ -37,6 +39,7 @@ public struct FileNode: Identifiable, Hashable, Sendable {
         self.url = url
         self.kind = kind
         self.flags = flags
+        self.typeIdentifier = typeIdentifier
         self.logicalSize = logicalSize
         self.allocatedSize = allocatedSize
         self.modifiedAt = modifiedAt

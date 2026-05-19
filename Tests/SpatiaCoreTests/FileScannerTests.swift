@@ -36,6 +36,19 @@ final class FileScannerTests: XCTestCase {
         XCTAssertEqual(names, ["visible.txt"])
     }
 
+    func testReadsTypeIdentifierWhenAvailable() throws {
+        let fixture = try ScannerFixture()
+        defer { try? fixture.tearDown() }
+
+        try fixture.file("photo.png", bytes: 8)
+
+        let result = FileScanner().scan(root: fixture.rootURL)
+        let root = try XCTUnwrap(result.snapshot.root)
+        let image = try XCTUnwrap(fixture.child(named: "photo.png", in: root, snapshot: result.snapshot))
+
+        XCTAssertNotNil(image.typeIdentifier)
+    }
+
     func testMaxDepthSkipsDescendantsBeyondLimit() throws {
         let fixture = try ScannerFixture()
         defer { try? fixture.tearDown() }

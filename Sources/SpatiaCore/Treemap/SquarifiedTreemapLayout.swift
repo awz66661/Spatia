@@ -1,22 +1,65 @@
 import CoreGraphics
 import Foundation
 
+public enum TreemapFlow: Hashable, Sendable {
+    case rows
+    case columns
+}
+
+public struct TreemapOrientationPolicy: Hashable, Sendable {
+    public enum Strategy: Hashable, Sendable {
+        case adaptive
+        case columnsFirstAlternating
+    }
+
+    public var strategy: Strategy
+
+    public init(strategy: Strategy = .adaptive) {
+        self.strategy = strategy
+    }
+
+    public static let adaptive = TreemapOrientationPolicy(strategy: .adaptive)
+    public static let spaceSniffer = TreemapOrientationPolicy(strategy: .columnsFirstAlternating)
+
+    public func flow(for rect: CGRect, depth: Int) -> TreemapFlow {
+        switch strategy {
+        case .adaptive:
+            return rect.width >= rect.height ? .rows : .columns
+        case .columnsFirstAlternating:
+            let isWide = rect.width >= rect.height
+            let evenDepth = depth.isMultiple(of: 2)
+            switch (isWide, evenDepth) {
+            case (true, true), (false, false):
+                return .columns
+            case (true, false), (false, true):
+                return .rows
+            }
+        }
+    }
+}
+
 public struct SquarifiedTreemapLayout: Sendable {
     public var minTileArea: CGFloat
     public var maxItems: Int
     public var contentPadding: CGFloat
+    public var readableWeightExponent: Double
+    public var orientationPolicy: TreemapOrientationPolicy
 
     public init(
         minTileArea: CGFloat = 16,
         maxItems: Int = 500,
-        contentPadding: CGFloat = 1
+        contentPadding: CGFloat = 1,
+        readableWeightExponent: Double = 1,
+        orientationPolicy: TreemapOrientationPolicy = .adaptive
     ) {
         self.minTileArea = minTileArea
         self.maxItems = maxItems
         self.contentPadding = contentPadding
+        self.readableWeightExponent = readableWeightExponent
+        self.orientationPolicy = orientationPolicy
     }
 
-    public func layout(items: [TreemapInput], in bounds: CGRect) -> [Tile] {
+    public func layout(items: [TreemapInput], in bounds: CGRect, depth: Int = 0) -> [Tile] {
         guard bounds.width > 1, bounds.height > 1 else { return [] }
 
         let positiveItems = items
@@ -25,22 +68,24 @@ public struct SquarifiedTreemapLayout: Sendable {
 
         guard !positiveItems.isEmpty else { return [] }
 
-        let totalSize = positiveItems.reduce(Int64(0)) { $0 + $1.size }
-        guard totalSize > 0 else { return [] }
+        let totalWeight = positiveItems.reduce(CGFloat(0)) { $0 + layoutWeight(for: $1.size) }
+        guard totalWeight > 0 else { return [] }
 
         let layoutRect = bounds.insetBy(dx: contentPadding, dy: contentPadding)
         guard layoutRect.width > 1, layoutRect.height > 1 else { return [] }
 
-        let areaScale = (layoutRect.width * layoutRect.height) / CGFloat(totalSize)
+        let areaScale = (layoutRect.width * layoutRect.height) / totalWeight
         var weightedItems: [WeightedItem] = []
         var otherSize: Int64 = 0
+        var otherArea: CGFloat = 0
 
         for (index, item) in positiveItems.enumerated() {
-            let area = CGFloat(item.size) * areaScale
+            let area = layoutWeight(for: item.size) * areaScale
             if index >= maxItems || area < minTileArea {
                 otherSize += item.size
+                otherArea += area
             } else {
-                weightedItems.append(WeightedItem(input: item, area: area))
+                weightedItems.append(WeightedItem(input: item, area: area, depth: depth))
             }
         }
 
@@ -53,15 +98,22 @@ public struct SquarifiedTreemapLayout: Sendable {
                         size: otherSize,
                         kind: .other
                     ),
-                    area: CGFloat(otherSize) * areaScale
+                    area: otherArea,
+                    depth: depth
                 )
             )
         }
 
-        return squarify(weightedItems, in: layoutRect)
+        return squarify(weightedItems, in: layoutRect, depth: depth)
     }
 
-    private func squarify(_ items: [WeightedItem], in rect: CGRect) -> [Tile] {
+    public func layoutWeight(for size: Int64) -> CGFloat {
+        guard size > 0 else { return 0 }
+        let exponent = max(0.25, min(readableWeightExponent, 1))
+        return CGFloat(pow(Double(size), exponent))
+    }
+
+    private func squarify(_ items: [WeightedItem], in rect: CGRect, depth: Int) -> [Tile] {
         var remaining = items
         var row: [WeightedItem] = []
         var currentRect = rect
@@ -76,13 +128,13 @@ public struct SquarifiedTreemapLayout: Sendable {
             if row.isEmpty || candidateWorst <= currentWorst {
                 row.append(next)
             } else {
-                tiles.append(contentsOf: layout(row: row, in: &currentRect))
+                tiles.append(contentsOf: layout(row: row, in: &currentRect, depth: depth))
                 row = [next]
             }
         }
 
         if !row.isEmpty {
-            tiles.append(contentsOf: layout(row: row, in: &currentRect))
+            tiles.append(contentsOf: layout(row: row, in: &currentRect, depth: depth))
         }
 
         return tiles
@@ -106,15 +158,17 @@ public struct SquarifiedTreemapLayout: Sendable {
         )
     }
 
-    private func layout(row: [WeightedItem], in rect: inout CGRect) -> [Tile] {
+    private func layout(row: [WeightedItem], in rect: inout CGRect, depth: Int) -> [Tile] {
         guard !row.isEmpty, rect.width > 0, rect.height > 0 else { return [] }
 
         let areaSum = row.reduce(CGFloat(0)) { $0 + $1.area }
         guard areaSum > 0 else { return [] }
 
         var tiles: [Tile] = []
+        let flow = orientationPolicy.flow(for: rect, depth: depth)
 
-        if rect.width >= rect.height {
+        switch flow {
+        case .rows:
             let rowHeight = min(rect.height, areaSum / rect.width)
             var cursorX = rect.minX
 
@@ -127,7 +181,7 @@ public struct SquarifiedTreemapLayout: Sendable {
 
             rect.origin.y += rowHeight
             rect.size.height = max(0, rect.height - rowHeight)
-        } else {
+        case .columns:
             let columnWidth = min(rect.width, areaSum / rect.height)
             var cursorY = rect.minY
 
@@ -154,16 +208,18 @@ public struct SquarifiedTreemapLayout: Sendable {
 private struct WeightedItem {
     var input: TreemapInput
     var area: CGFloat
+    var depth: Int
 
     func tile(in rect: CGRect) -> Tile {
         Tile(
             nodeID: input.nodeID,
             rect: rect,
-            depth: 0,
+            depth: depth,
             label: input.label,
             size: input.size,
             kind: input.kind,
-            flags: input.flags
+            flags: input.flags,
+            category: input.category
         )
     }
 }
