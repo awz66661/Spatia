@@ -9,6 +9,9 @@ struct MainWindowView: View {
             TopBar()
                 .frame(height: DesignTokens.topBarHeight)
                 .background(DesignTokens.topBarBackground)
+                .overlay(alignment: .bottom) {
+                    Divider()
+                }
 
             HSplitView {
                 SidebarView()
@@ -221,17 +224,18 @@ private struct SidebarMetricRow: View {
     var value: String
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline) {
+        HStack(alignment: .center, spacing: 8) {
             Text(label)
                 .foregroundStyle(.secondary)
-            Spacer(minLength: 8)
+            Spacer(minLength: 0)
             Text(value)
                 .fontWeight(.medium)
-                .frame(maxWidth: 92, alignment: .trailing)
+                .frame(width: 92, alignment: .trailing)
                 .lineLimit(1)
                 .truncationMode(.middle)
         }
         .font(.caption)
+        .frame(maxWidth: .infinity, minHeight: 17, alignment: .center)
     }
 }
 
