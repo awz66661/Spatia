@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SWIFT_BIN="${SWIFT_BIN:-/usr/bin/swift}"
 INFO_PLIST="${ROOT_DIR}/Resources/Info.plist"
+APP_ICON="${ROOT_DIR}/Resources/AppIcon.icns"
 APP_NAME="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleName' "${INFO_PLIST}")"
 APP_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "${INFO_PLIST}")"
 APP_DIR="${ROOT_DIR}/dist/${APP_NAME}-${APP_VERSION}.app"
@@ -31,6 +32,7 @@ mkdir -p "${MACOS_DIR}" "${RESOURCES_DIR}"
 
 cp "${BIN_DIR}/${APP_NAME}" "${MACOS_DIR}/${APP_NAME}"
 cp "${INFO_PLIST}" "${CONTENTS_DIR}/Info.plist"
+cp "${APP_ICON}" "${RESOURCES_DIR}/AppIcon.icns"
 
 if [[ "${SKIP_CODESIGN:-0}" == "1" ]]; then
   echo "Skipping code signing because SKIP_CODESIGN=1" >&2
