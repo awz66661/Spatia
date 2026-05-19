@@ -9,9 +9,6 @@ struct MainWindowView: View {
             TopBar()
                 .frame(height: DesignTokens.topBarHeight)
                 .background(DesignTokens.topBarBackground)
-                .overlay(alignment: .bottom) {
-                    Divider()
-                }
 
             HSplitView {
                 SidebarView()
