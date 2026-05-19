@@ -10,7 +10,26 @@ jobs:
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
+      - name: Check environment
+        run: ./Scripts/check-env.sh
       - name: Build
         run: ./Scripts/build-debug.sh
       - name: Test
         run: ./Scripts/test.sh
+      - name: Unsigned package smoke
+        run: |
+          DMG_PATH="$(SKIP_CODESIGN=1 ./Scripts/package-dmg.sh | tail -n 1)"
+          test -f "${DMG_PATH}"
+          test -f "${DMG_PATH}.sha256"
+
+          hdiutil verify "${DMG_PATH}"
+
+          MOUNT_ROOT="$(mktemp -d)"
+          hdiutil attach "${DMG_PATH}" -readonly -nobrowse -mountroot "${MOUNT_ROOT}"
+          VOLUME_PATH="$(find "${MOUNT_ROOT}" -mindepth 1 -maxdepth 1 -type d | head -n 1)"
+          test -n "${VOLUME_PATH}"
+          test -d "${VOLUME_PATH}"/Spatia-*.app
+          test -L "${VOLUME_PATH}/Applications"
+          hdiutil detach "${VOLUME_PATH}"
+
+          shasum -a 256 --check "${DMG_PATH}.sha256"

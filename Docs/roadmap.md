@@ -11,22 +11,22 @@
 - [x] Add AppKit/CoreGraphics treemap canvas
 - [x] Add basic inspector
 - [x] Add initial unit tests
-- [ ] Verify with full Xcode environment
-- [ ] Add hover state and richer hit testing
-- [ ] Add double-click directory navigation polish
-- [ ] Add synthetic benchmark fixtures
+- [x] Verify with full Xcode environment
+- [x] Add hover state and richer hit testing
+- [x] Add double-click directory navigation polish
+- [x] Add synthetic benchmark fixtures
 
 ## v0.2 Usable Explorer
 
 - [ ] Sidebar scan sources
 - [ ] Permission issue summary view
-- [ ] Reveal in Finder
-- [ ] Copy Path
+- [x] Reveal in Finder
+- [x] Copy Path
 - [ ] Quick Look
 - [ ] File type color mapping
 - [ ] Better labels and text fitting
 - [ ] Light/dark/high-contrast polish
-- [ ] Other small files behavior review
+- [x] Other small files behavior review
 
 ## v0.3 Safe Actions
 
@@ -41,13 +41,15 @@
 
 ## v1.0 GitHub Release
 
-- [ ] Stable DMG packaging
-- [ ] Manual GitHub Release checklist
-- [ ] Signed build path documented
+- [x] Stable versioned DMG packaging
+- [x] Manual GitHub Release checklist
+- [x] Signed build path documented
+- [x] Full Xcode verification checklist
+- [x] CI packaging smoke test
 - [ ] Privacy statement in app and README
 - [ ] Architecture docs complete
 - [ ] Contribution guide complete
-- [ ] Performance baseline documented
+- [x] Performance baseline documented
 - [ ] Notarization decision revisited
 
 ## Later

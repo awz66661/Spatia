@@ -37,7 +37,35 @@ Open `Package.swift` in Xcode and run the `Spatia` executable target.
 For a full app-bundle workflow, use:
 
 ```sh
-./Scripts/package-app.sh
+SKIP_CODESIGN=1 ./Scripts/package-app.sh
+```
+
+The app bundle name is versioned from `Resources/Info.plist`, for example:
+
+```text
+dist/Spatia-0.1.0.app
+```
+
+Early local packages are unsigned unless you provide a signing identity. macOS may warn that unsigned or ad-hoc signed builds are from an unidentified developer.
+
+## Full Xcode Verification Checklist
+
+Use this before tagging or distributing a build:
+
+- Select full Xcode: `sudo xcode-select -s /Applications/Xcode.app/Contents/Developer`
+- Confirm the selected tools: `xcode-select -p` and `xcodebuild -version`
+- Open `Package.swift` in Xcode
+- Select the `Spatia` scheme and a local Mac destination
+- Build with `Product > Build`
+- Run with `Product > Run`
+- Run tests with `Product > Test`
+- Confirm the app launches without console crashes
+- Confirm first-run permission prompts match `Docs/permissions.md`
+- Rerun terminal checks: `./Scripts/check-env.sh`, `./Scripts/build-debug.sh`, and `./Scripts/test.sh`
+- Verify the Xcode scheme from the command line:
+
+```sh
+xcodebuild -scheme Spatia -destination 'platform=macOS' -derivedDataPath DerivedData build
 ```
 
 ## Local Tooling Policy

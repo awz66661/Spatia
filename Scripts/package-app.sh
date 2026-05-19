@@ -3,8 +3,10 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SWIFT_BIN="${SWIFT_BIN:-/usr/bin/swift}"
-APP_NAME="Spatia"
-APP_DIR="${ROOT_DIR}/dist/${APP_NAME}.app"
+INFO_PLIST="${ROOT_DIR}/Resources/Info.plist"
+APP_NAME="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleName' "${INFO_PLIST}")"
+APP_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "${INFO_PLIST}")"
+APP_DIR="${ROOT_DIR}/dist/${APP_NAME}-${APP_VERSION}.app"
 CONTENTS_DIR="${APP_DIR}/Contents"
 MACOS_DIR="${CONTENTS_DIR}/MacOS"
 RESOURCES_DIR="${CONTENTS_DIR}/Resources"
@@ -28,10 +30,16 @@ rm -rf "${APP_DIR}"
 mkdir -p "${MACOS_DIR}" "${RESOURCES_DIR}"
 
 cp "${BIN_DIR}/${APP_NAME}" "${MACOS_DIR}/${APP_NAME}"
-cp "${ROOT_DIR}/Resources/Info.plist" "${CONTENTS_DIR}/Info.plist"
+cp "${INFO_PLIST}" "${CONTENTS_DIR}/Info.plist"
 
-if [[ "${SKIP_CODESIGN:-0}" != "1" ]] && command -v codesign >/dev/null 2>&1; then
-  codesign --force --deep --sign - "${APP_DIR}"
+if [[ "${SKIP_CODESIGN:-0}" == "1" ]]; then
+  echo "Skipping code signing because SKIP_CODESIGN=1" >&2
+elif command -v codesign >/dev/null 2>&1; then
+  CODESIGN_IDENTITY="${CODESIGN_IDENTITY:--}"
+  codesign --force --deep --sign "${CODESIGN_IDENTITY}" "${APP_DIR}"
+else
+  echo "codesign is unavailable; set SKIP_CODESIGN=1 for unsigned packaging." >&2
+  exit 1
 fi
 
 echo "${APP_DIR}"

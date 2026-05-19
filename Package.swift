@@ -9,6 +9,7 @@ let package = Package(
     ],
     products: [
         .executable(name: "Spatia", targets: ["Spatia"]),
+        .executable(name: "SpatiaBenchmarks", targets: ["SpatiaBenchmarks"]),
         .library(name: "SpatiaCore", targets: ["SpatiaCore"])
     ],
     targets: [
@@ -20,6 +21,11 @@ let package = Package(
         .target(
             name: "SpatiaCore",
             path: "Sources/SpatiaCore"
+        ),
+        .executableTarget(
+            name: "SpatiaBenchmarks",
+            dependencies: ["SpatiaCore"],
+            path: "Sources/SpatiaBenchmarks"
         ),
         .testTarget(
             name: "SpatiaCoreTests",

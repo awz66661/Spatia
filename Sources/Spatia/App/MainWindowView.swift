@@ -112,8 +112,8 @@ private struct TreemapDetailView: View {
                         get: { model.selectedID },
                         set: { model.select($0) }
                     ),
-                    onActivate: {
-                        model.enterSelectedDirectory()
+                    onActivate: { nodeID in
+                        model.enterDirectory(nodeID)
                     }
                 )
             }

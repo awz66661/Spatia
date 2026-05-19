@@ -112,8 +112,14 @@ final class AppModel: ObservableObject {
     }
 
     func enterSelectedDirectory() {
-        guard let selectedNode, !selectedNode.children.isEmpty else { return }
-        displayRootID = selectedNode.id
+        guard let selectedID else { return }
+        enterDirectory(selectedID)
+    }
+
+    func enterDirectory(_ id: NodeID) {
+        guard id != syntheticOtherNodeID, let node = snapshot?[id], !node.children.isEmpty else { return }
+        guard node.kind == .directory || node.kind == .package || node.kind == .volume else { return }
+        displayRootID = node.id
         selectedID = nil
     }
 

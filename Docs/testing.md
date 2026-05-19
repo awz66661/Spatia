@@ -6,6 +6,9 @@ Current tests cover:
 
 - squarified treemap bounds behavior
 - small item grouping
+- treemap hit testing
+- scanner aggregation and options
+- package and symlink behavior
 - deletion safety policy basics
 
 Run:
@@ -13,6 +16,8 @@ Run:
 ```sh
 ./Scripts/test.sh
 ```
+
+Scanner tests use temporary fixture directories and do not scan the contributor's home directory. Permission-denied behavior is skipped when the local filesystem still permits reading the chmod-restricted fixture.
 
 ## Required Test Areas
 
@@ -57,3 +62,11 @@ TestData/
 ```
 
 Do not rely on a contributor's real home directory for scanner tests.
+
+## Benchmark Smoke Test
+
+```sh
+./Scripts/benchmark-scanner.sh
+```
+
+This runs the `SpatiaBenchmarks` executable target and emits JSON rows for synthetic scanner fixtures. It is intended as a lightweight local regression signal before broader profiling exists.

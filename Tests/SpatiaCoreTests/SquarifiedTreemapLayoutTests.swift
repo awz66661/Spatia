@@ -38,4 +38,19 @@ final class SquarifiedTreemapLayoutTests: XCTestCase {
 
         XCTAssertTrue(tiles.contains { $0.nodeID == syntheticOtherNodeID })
     }
+
+    func testGroupedSmallItemsPreserveAggregateSize() {
+        let layout = SquarifiedTreemapLayout(minTileArea: 1_000, maxItems: 1, contentPadding: 0)
+        let tiles = layout.layout(
+            items: [
+                TreemapInput(nodeID: 0, label: "A", size: 100, kind: .directory),
+                TreemapInput(nodeID: 1, label: "B", size: 30, kind: .file),
+                TreemapInput(nodeID: 2, label: "C", size: 20, kind: .file),
+                TreemapInput(nodeID: 3, label: "D", size: 10, kind: .file)
+            ],
+            in: CGRect(x: 0, y: 0, width: 200, height: 100)
+        )
+
+        XCTAssertEqual(tiles.first { $0.nodeID == syntheticOtherNodeID }?.size, 60)
+    }
 }
