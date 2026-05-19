@@ -79,6 +79,31 @@ final class SquarifiedTreemapLayoutTests: XCTestCase {
         XCTAssertGreaterThan(layout.layoutWeight(for: 10_000), layout.layoutWeight(for: 100))
     }
 
+    func testCompressedReadableWeightPreservesPriorityWithoutRawSizeDominance() {
+        let layout = SquarifiedTreemapLayout(
+            minTileArea: 0,
+            maxItems: 10,
+            contentPadding: 0,
+            readableWeightExponent: 0.58,
+            orientationPolicy: .spaceSniffer
+        )
+        let tiles = layout.layout(
+            items: [
+                TreemapInput(nodeID: 0, label: "node_modules", size: 10_000, kind: .directory),
+                TreemapInput(nodeID: 1, label: "src", size: 100, kind: .directory)
+            ],
+            in: CGRect(x: 0, y: 0, width: 600, height: 300)
+        )
+
+        let large = try! XCTUnwrap(tiles.first { $0.nodeID == 0 })
+        let small = try! XCTUnwrap(tiles.first { $0.nodeID == 1 })
+        let areaRatio = (large.rect.width * large.rect.height) / (small.rect.width * small.rect.height)
+
+        XCTAssertGreaterThan(areaRatio, 1)
+        XCTAssertLessThan(areaRatio, 30)
+        XCTAssertLessThan(layout.layoutWeight(for: 10_000) / layout.layoutWeight(for: 100), 30)
+    }
+
     func testSpaceSnifferOrientationPolicyAlternatesDirection() {
         let policy = TreemapOrientationPolicy.spaceSniffer
 

@@ -2,24 +2,51 @@ import CoreGraphics
 import Foundation
 
 public struct RecursiveTreemapBuildOptions: Hashable, Sendable {
-    public var maxDepth: Int
+    public var maximumTraversalDepth: Int
     public var childInset: CGFloat
-    public var minimumParentArea: CGFloat
-    public var minimumChildSide: CGFloat
+    public var minimumExpandableTileArea: CGFloat
+    public var minimumChildContentArea: CGFloat
+    public var minimumUsefulChildSide: CGFloat
+    public var minimumUsefulChildArea: CGFloat
     public var reservedHeaderHeight: CGFloat
+    public var maximumTileCount: Int?
+
+    public var maxDepth: Int {
+        get { maximumTraversalDepth }
+        set { maximumTraversalDepth = newValue }
+    }
+
+    public var minimumParentArea: CGFloat {
+        get { minimumExpandableTileArea }
+        set { minimumExpandableTileArea = newValue }
+    }
+
+    public var minimumChildSide: CGFloat {
+        get { minimumUsefulChildSide }
+        set { minimumUsefulChildSide = newValue }
+    }
 
     public init(
-        maxDepth: Int = 3,
+        maxDepth: Int? = nil,
+        maximumTraversalDepth: Int = 12,
         childInset: CGFloat = 8,
-        minimumParentArea: CGFloat = 1_800,
-        minimumChildSide: CGFloat = 26,
-        reservedHeaderHeight: CGFloat = 22
+        minimumParentArea: CGFloat? = nil,
+        minimumExpandableTileArea: CGFloat = 10_000,
+        minimumChildContentArea: CGFloat = 7_500,
+        minimumChildSide: CGFloat? = nil,
+        minimumUsefulChildSide: CGFloat = 28,
+        minimumUsefulChildArea: CGFloat = 900,
+        reservedHeaderHeight: CGFloat = 22,
+        maximumTileCount: Int? = nil
     ) {
-        self.maxDepth = maxDepth
+        self.maximumTraversalDepth = maxDepth ?? maximumTraversalDepth
         self.childInset = childInset
-        self.minimumParentArea = minimumParentArea
-        self.minimumChildSide = minimumChildSide
+        self.minimumExpandableTileArea = minimumParentArea ?? minimumExpandableTileArea
+        self.minimumChildContentArea = minimumChildContentArea
+        self.minimumUsefulChildSide = minimumChildSide ?? minimumUsefulChildSide
+        self.minimumUsefulChildArea = minimumUsefulChildArea
         self.reservedHeaderHeight = reservedHeaderHeight
+        self.maximumTileCount = maximumTileCount
     }
 }
 
@@ -41,24 +68,42 @@ public struct RecursiveTreemapBuilder: Sendable {
         self.options = options
     }
 
-    public func build(snapshot: FileTreeSnapshot, rootID: NodeID, in bounds: CGRect) -> [Tile] {
+    public func build(
+        snapshot: FileTreeSnapshot,
+        rootID: NodeID,
+        in bounds: CGRect,
+        expandedNodeIDs: Set<NodeID> = []
+    ) -> [Tile] {
         guard let root = snapshot[rootID], bounds.width > 1, bounds.height > 1 else { return [] }
+        var remainingTileBudget = max(0, options.maximumTileCount ?? Int.max)
+        guard remainingTileBudget > 0 else { return [] }
 
         let children = visibleChildren(of: root, in: snapshot)
         guard !children.isEmpty else {
+            remainingTileBudget -= 1
             return [tile(for: root, rect: bounds.insetBy(dx: 2, dy: 2), depth: 0)]
         }
 
-        return buildChildren(of: root, in: snapshot, rect: bounds, depth: 0)
+        return buildChildren(
+            of: root,
+            in: snapshot,
+            rect: bounds,
+            depth: 0,
+            expandedNodeIDs: expandedNodeIDs,
+            remainingTileBudget: &remainingTileBudget
+        )
     }
 
     private func buildChildren(
         of parent: FileNode,
         in snapshot: FileTreeSnapshot,
         rect: CGRect,
-        depth: Int
+        depth: Int,
+        expandedNodeIDs: Set<NodeID>,
+        remainingTileBudget: inout Int
     ) -> [Tile] {
-        guard depth < options.maxDepth else { return [] }
+        guard remainingTileBudget > 0 else { return [] }
+        guard depth < options.maximumTraversalDepth else { return [] }
 
         let children = visibleChildren(of: parent, in: snapshot)
         guard !children.isEmpty else { return [] }
@@ -75,10 +120,23 @@ public struct RecursiveTreemapBuilder: Sendable {
         }
 
         var tiles = layout.layout(items: inputs, in: rect, depth: depth)
+        if tiles.count > remainingTileBudget {
+            tiles = Array(tiles.prefix(remainingTileBudget))
+        }
+        remainingTileBudget -= tiles.count
 
-        guard depth + 1 < options.maxDepth else { return tiles }
+        guard remainingTileBudget > 0, depth + 1 < options.maximumTraversalDepth else { return tiles }
 
-        for index in tiles.indices where shouldRenderChildren(for: tiles[index]) {
+        let expandableTileIndices = tiles.indices
+            .filter { expandedNodeIDs.contains(tiles[$0].nodeID) && shouldRenderChildren(for: tiles[$0]) }
+            .sorted { lhs, rhs in
+                let lhsArea = tiles[lhs].rect.width * tiles[lhs].rect.height
+                let rhsArea = tiles[rhs].rect.width * tiles[rhs].rect.height
+                return lhsArea > rhsArea
+            }
+
+        for index in expandableTileIndices {
+            guard remainingTileBudget > 0 else { break }
             var tile = tiles[index]
             guard let childNode = snapshot[tile.nodeID], !visibleChildren(of: childNode, in: snapshot).isEmpty else {
                 continue
@@ -86,12 +144,22 @@ public struct RecursiveTreemapBuilder: Sendable {
 
             tile.reservedHeaderHeight = headerHeight(for: tile.rect, depth: depth)
             let childRect = insetForChildren(tile, depth: depth)
-            guard childRect.width >= options.minimumChildSide, childRect.height >= options.minimumChildSide else {
+            guard shouldExpandChildren(of: childNode, in: snapshot, childRect: childRect, depth: depth + 1) else {
                 continue
             }
 
+            let childTiles = buildChildren(
+                of: childNode,
+                in: snapshot,
+                rect: childRect,
+                depth: depth + 1,
+                expandedNodeIDs: expandedNodeIDs,
+                remainingTileBudget: &remainingTileBudget
+            )
+            guard !childTiles.isEmpty else { continue }
+
             tiles[index] = tile
-            tiles.append(contentsOf: buildChildren(of: childNode, in: snapshot, rect: childRect, depth: depth + 1))
+            tiles.append(contentsOf: childTiles)
         }
 
         return tiles
@@ -111,7 +179,40 @@ public struct RecursiveTreemapBuilder: Sendable {
     private func shouldRenderChildren(for tile: Tile) -> Bool {
         guard tile.nodeID != syntheticOtherNodeID else { return false }
         guard tile.kind == .directory || tile.kind == .package || tile.kind == .volume else { return false }
-        return tile.rect.width * tile.rect.height >= options.minimumParentArea
+        return tile.rect.width * tile.rect.height >= options.minimumExpandableTileArea
+    }
+
+    private func shouldExpandChildren(
+        of node: FileNode,
+        in snapshot: FileTreeSnapshot,
+        childRect: CGRect,
+        depth: Int
+    ) -> Bool {
+        guard childRect.width >= options.minimumUsefulChildSide,
+              childRect.height >= options.minimumUsefulChildSide,
+              childRect.width * childRect.height >= options.minimumChildContentArea else {
+            return false
+        }
+
+        let inputs = visibleChildren(of: node, in: snapshot).map { child in
+            TreemapInput(
+                nodeID: child.id,
+                label: child.name,
+                size: child.allocatedSize,
+                kind: child.kind,
+                flags: child.flags,
+                category: FileCategoryClassifier.category(for: child)
+            )
+        }
+        guard !inputs.isEmpty else { return false }
+
+        let predictedTiles = layout.layout(items: inputs, in: childRect, depth: depth)
+        return predictedTiles.contains { tile in
+            let area = tile.rect.width * tile.rect.height
+            return tile.rect.width >= options.minimumUsefulChildSide
+                && tile.rect.height >= options.minimumUsefulChildSide
+                && area >= options.minimumUsefulChildArea
+        }
     }
 
     private func insetForChildren(_ tile: Tile, depth: Int) -> CGRect {

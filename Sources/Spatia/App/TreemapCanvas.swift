@@ -5,6 +5,7 @@ import SwiftUI
 struct TreemapCanvas: NSViewRepresentable {
     var snapshot: FileTreeSnapshot
     var rootID: NodeID
+    var expandedNodeIDs: Set<NodeID>
     @Binding var selectedID: NodeID?
     var onActivate: (NodeID) -> Void
     var onPreview: (NodeID) -> Void
@@ -20,6 +21,7 @@ struct TreemapCanvas: NSViewRepresentable {
     func updateNSView(_ nsView: TreemapNSView, context: Context) {
         nsView.snapshot = snapshot
         nsView.rootID = rootID
+        nsView.expandedNodeIDs = expandedNodeIDs
         nsView.selectedID = selectedID
         nsView.onSelect = { selectedID = $0 }
         nsView.onActivate = onActivate
@@ -33,6 +35,10 @@ final class TreemapNSView: NSView {
     }
 
     var rootID: NodeID? {
+        didSet { needsDisplay = true }
+    }
+
+    var expandedNodeIDs: Set<NodeID> = [] {
         didSet { needsDisplay = true }
     }
 
@@ -56,13 +62,22 @@ final class TreemapNSView: NSView {
 
     private let builder = RecursiveTreemapBuilder(
         layout: SquarifiedTreemapLayout(
-            minTileArea: 30,
-            maxItems: 420,
-            contentPadding: 2,
-            readableWeightExponent: 0.88,
+            minTileArea: 80,
+            maxItems: 520,
+            contentPadding: 1,
+            readableWeightExponent: 0.58,
             orientationPolicy: .spaceSniffer
         ),
-        options: RecursiveTreemapBuildOptions(maxDepth: 3, childInset: 8, minimumParentArea: 1_600)
+        options: RecursiveTreemapBuildOptions(
+            maximumTraversalDepth: 12,
+            childInset: 6,
+            minimumExpandableTileArea: 10_000,
+            minimumChildContentArea: 7_500,
+            minimumUsefulChildSide: 28,
+            minimumUsefulChildArea: 900,
+            reservedHeaderHeight: 20,
+            maximumTileCount: 1_100
+        )
     )
     private let hitTester = TreemapHitTester(gapTolerance: 1)
     private let labelPolicy = TreemapLabelPolicy()
@@ -110,7 +125,12 @@ final class TreemapNSView: NSView {
             return
         }
 
-        renderedTiles = builder.build(snapshot: snapshot, rootID: rootID, in: bounds.insetBy(dx: 8, dy: 8))
+        renderedTiles = builder.build(
+            snapshot: snapshot,
+            rootID: rootID,
+            in: bounds.insetBy(dx: 3, dy: 3),
+            expandedNodeIDs: expandedNodeIDs
+        )
 
         guard let context = NSGraphicsContext.current?.cgContext else { return }
         context.setAllowsAntialiasing(true)

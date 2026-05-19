@@ -23,18 +23,7 @@ struct MainWindowView: View {
                     }
 
                 TreemapDetailView()
-                    .frame(minWidth: 540)
-
-                InspectorView()
-                    .frame(
-                        minWidth: DesignTokens.inspectorMinWidth,
-                        idealWidth: DesignTokens.inspectorIdealWidth,
-                        maxWidth: DesignTokens.inspectorMaxWidth
-                    )
-                    .background(DesignTokens.sidePanelBackground)
-                    .overlay(alignment: .leading) {
-                        Divider()
-                    }
+                    .frame(minWidth: 620)
             }
         }
         .background(DesignTokens.windowBackground)
@@ -43,13 +32,14 @@ struct MainWindowView: View {
 
 private enum DesignTokens {
     static let topBarHeight: CGFloat = 58
-    static let sidebarMinWidth: CGFloat = 220
-    static let sidebarIdealWidth: CGFloat = 240
-    static let sidebarMaxWidth: CGFloat = 260
-    static let inspectorMinWidth: CGFloat = 300
-    static let inspectorIdealWidth: CGFloat = 320
-    static let inspectorMaxWidth: CGFloat = 360
-    static let panelPadding: CGFloat = 14
+    static let sidebarMinWidth: CGFloat = 180
+    static let sidebarIdealWidth: CGFloat = 204
+    static let sidebarMaxWidth: CGFloat = 230
+    static let panelPadding: CGFloat = 12
+    static let sidebarIconColumnWidth: CGFloat = 26
+    static let sidebarIconSize: CGFloat = 22
+    static let sidebarButtonHeight: CGFloat = 34
+    static let sidebarItemHeight: CGFloat = 44
     static let rowCornerRadius: CGFloat = 6
 
     static var windowBackground: Color {
@@ -61,6 +51,10 @@ private enum DesignTokens {
     }
 
     static var sidePanelBackground: Color {
+        Color(nsColor: .controlBackgroundColor)
+    }
+
+    static var detailPanelBackground: Color {
         Color(nsColor: .controlBackgroundColor)
     }
 }
@@ -108,35 +102,67 @@ private struct SidebarView: View {
     @EnvironmentObject private var model: AppModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            SidebarSection(title: "Scan") {
-                VStack(alignment: .leading, spacing: 2) {
-                    SidebarButton(title: "Downloads", systemImage: "arrow.down.circle", action: model.scanDownloads)
-                    SidebarButton(title: "Desktop", systemImage: "desktopcomputer", action: model.scanDesktop)
-                    SidebarButton(title: "Documents", systemImage: "doc.text", action: model.scanDocuments)
-                    SidebarButton(title: "Applications", systemImage: "app.dashed", action: model.scanApplications)
-                    SidebarButton(title: "Home", systemImage: "house", action: model.scanHome)
-                    SidebarButton(title: "Choose Folder", systemImage: "folder.badge.plus", action: model.chooseFolder)
+        ScrollView(.vertical, showsIndicators: true) {
+            VStack(alignment: .leading, spacing: 14) {
+                SidebarSection(title: "Scan") {
+                    VStack(alignment: .leading, spacing: 2) {
+                        SidebarButton(title: "Downloads", systemImage: "arrow.down.circle", action: model.scanDownloads)
+                        SidebarButton(title: "Desktop", systemImage: "desktopcomputer", action: model.scanDesktop)
+                        SidebarButton(title: "Documents", systemImage: "doc.text", action: model.scanDocuments)
+                        SidebarButton(title: "Applications", systemImage: "app.dashed", action: model.scanApplications)
+                        SidebarButton(title: "Home", systemImage: "house", action: model.scanHome)
+                        SidebarButton(title: "Choose Folder", systemImage: "folder.badge.plus", action: model.chooseFolder)
+                    }
                 }
-            }
 
-            if let currentScanURL = model.currentScanURL {
-                SidebarSection(title: "Current Root") {
-                    Text(currentScanURL.path)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .textSelection(.enabled)
-                        .lineLimit(5)
-                        .fixedSize(horizontal: false, vertical: true)
+                if let overview = model.scanOverview {
+                    SidebarSection(title: "Overview") {
+                        VStack(spacing: 6) {
+                            SidebarMetricRow(label: "Source", value: overview.sourceName)
+                            SidebarMetricRow(label: "Disk", value: overview.diskUsage)
+                            SidebarMetricRow(label: "Files", value: overview.fileCount)
+                            SidebarMetricRow(label: "Folders", value: overview.folderCount)
+                            SidebarMetricRow(label: "Scan", value: overview.duration)
+                        }
+
+                        Text(overview.sourcePath)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(3)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(.top, 2)
+                    }
+                } else if let currentScanURL = model.currentScanURL {
+                    SidebarSection(title: "Source") {
+                        Text(currentScanURL.path)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(4)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
+
+                if !model.largestDisplayRootChildren.isEmpty {
+                    SidebarSection(title: "Largest Here") {
+                        VStack(alignment: .leading, spacing: 3) {
+                            ForEach(model.largestDisplayRootChildren) { item in
+                                SidebarItemButton(item: item) {
+                                    model.openSidebarItem(item.id)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                PermissionSummaryView(issues: model.permissionIssues)
             }
-
-            PermissionSummaryView(issues: model.permissionIssues)
-
-            Spacer()
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .padding(.horizontal, DesignTokens.panelPadding)
+            .padding(.vertical, 14)
+            .background(DesignTokens.sidePanelBackground)
         }
-        .padding(.horizontal, DesignTokens.panelPadding)
-        .padding(.vertical, 16)
+        .scrollContentBackground(.hidden)
+        .background(DesignTokens.sidePanelBackground)
     }
 }
 
@@ -164,14 +190,96 @@ private struct SidebarButton: View {
 
     var body: some View {
         Button(action: action) {
-            Label(title, systemImage: systemImage)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
+            HStack(spacing: 8) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 16, weight: .regular))
+                    .foregroundStyle(.primary)
+                    .frame(
+                        width: DesignTokens.sidebarIconColumnWidth,
+                        height: DesignTokens.sidebarIconSize,
+                        alignment: .center
+                    )
+
+                Text(title)
+                    .font(.callout)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+
+                Spacer(minLength: 0)
+            }
+            .frame(maxWidth: .infinity, minHeight: DesignTokens.sidebarButtonHeight, alignment: .leading)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .padding(.vertical, 6)
-        .padding(.horizontal, 8)
+        .padding(.horizontal, 7)
         .background(Color(nsColor: .controlColor).opacity(0.35), in: RoundedRectangle(cornerRadius: DesignTokens.rowCornerRadius))
+    }
+}
+
+private struct SidebarMetricRow: View {
+    var label: String
+    var value: String
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(label)
+                .foregroundStyle(.secondary)
+            Spacer(minLength: 8)
+            Text(value)
+                .fontWeight(.medium)
+                .frame(maxWidth: 92, alignment: .trailing)
+                .lineLimit(1)
+                .truncationMode(.middle)
+        }
+        .font(.caption)
+    }
+}
+
+private struct SidebarItemButton: View {
+    var item: DisplayRootChildSummary
+    var action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 7) {
+                Image(systemName: item.isContainer ? "folder" : "doc")
+                    .font(.system(size: 15, weight: .regular))
+                    .foregroundStyle(.secondary)
+                    .frame(
+                        width: DesignTokens.sidebarIconColumnWidth,
+                        height: DesignTokens.sidebarIconSize,
+                        alignment: .center
+                    )
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(item.name)
+                        .font(.caption)
+                        .fontWeight(.medium)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+
+                    Text(item.kind)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                Text(item.sizeText)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+                    .frame(width: 62, alignment: .trailing)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            .frame(maxWidth: .infinity, minHeight: DesignTokens.sidebarItemHeight, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 7)
+        .background(Color(nsColor: .controlColor).opacity(0.28), in: RoundedRectangle(cornerRadius: DesignTokens.rowCornerRadius))
+        .help(item.path ?? item.name)
     }
 }
 
@@ -218,21 +326,31 @@ private struct TreemapDetailView: View {
     var body: some View {
         VStack(spacing: 0) {
             if let snapshot = model.snapshot, let rootID = model.displayRoot?.id {
-                TreemapCanvas(
-                    snapshot: snapshot,
-                    rootID: rootID,
-                    selectedID: Binding(
-                        get: { model.selectedID },
-                        set: { model.select($0) }
-                    ),
-                    onActivate: { nodeID in
-                        model.enterDirectory(nodeID)
-                    },
-                    onPreview: { nodeID in
-                        model.quickLook(nodeID)
+                VStack(spacing: 0) {
+                    TreemapCanvas(
+                        snapshot: snapshot,
+                        rootID: rootID,
+                        expandedNodeIDs: model.expandedTreemapNodeIDs,
+                        selectedID: Binding(
+                            get: { model.selectedID },
+                            set: { model.select($0) }
+                        ),
+                        onActivate: { nodeID in
+                            model.enterDirectory(nodeID)
+                        },
+                        onPreview: { nodeID in
+                            model.quickLook(nodeID)
+                        }
+                    )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .padding(4)
+
+                    if let detail = model.selectedNodeDetail {
+                        Divider()
+                        SelectionDetailPanel(detail: detail)
+                            .background(DesignTokens.detailPanelBackground)
                     }
-                )
-                .padding(10)
+                }
             } else {
                 ContentUnavailableView(
                     "No Scan",
@@ -246,103 +364,82 @@ private struct TreemapDetailView: View {
     }
 }
 
-private struct InspectorView: View {
+private struct SelectionDetailPanel: View {
     @EnvironmentObject private var model: AppModel
+    var detail: SelectionDetail
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                Text("Selection")
-                    .font(.caption)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(.secondary)
-                    .textCase(.uppercase)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top, spacing: 16) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(detail.name)
+                        .font(.headline)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .textSelection(.enabled)
 
-                if let node = model.selectedNode {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text(node.name)
-                            .font(.title3)
-                            .fontWeight(.semibold)
-                            .lineLimit(4)
+                    if let path = detail.path {
+                        Text(path)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                            .truncationMode(.middle)
                             .textSelection(.enabled)
-
-                        VStack(spacing: 7) {
-                            InfoRow(label: "Kind", value: node.kind.rawValue)
-                            InfoRow(label: "Disk Usage", value: ByteCount.string(node.allocatedSize))
-                            InfoRow(label: "File Size", value: ByteCount.string(node.logicalSize))
-                            InfoRow(label: "Category", value: FileCategoryClassifier.category(for: node).rawValue)
-
-                            if let modifiedAt = node.modifiedAt {
-                                InfoRow(label: "Modified", value: modifiedAt.formatted(date: .abbreviated, time: .shortened))
-                            }
-                        }
-
-                        if let url = node.url {
-                            Divider()
-                                .padding(.vertical, 2)
-
-                            Text(url.path)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .textSelection(.enabled)
-                                .lineLimit(6)
-
-                            VStack(spacing: 8) {
-                                HStack(spacing: 8) {
-                                    Button {
-                                        model.quickLookSelected()
-                                    } label: {
-                                        Label("Quick Look", systemImage: "eye")
-                                            .frame(maxWidth: .infinity)
-                                    }
-                                    .disabled(!model.canQuickLookSelected)
-
-                                    Button {
-                                        MacActions.reveal(url)
-                                    } label: {
-                                        Label("Reveal", systemImage: "arrow.up.forward.app")
-                                            .frame(maxWidth: .infinity)
-                                    }
-                                }
-
-                                Button {
-                                    MacActions.copyPath(url)
-                                } label: {
-                                    Label("Copy Path", systemImage: "doc.on.doc")
-                                        .frame(maxWidth: .infinity)
-                                }
-                            }
-                            .controlSize(.small)
-                        } else if node.id == syntheticOtherNodeID {
-                            Text("Grouped small items are selectable for context, but not navigable.")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-
-                        if node.flags.contains(.systemProtected) || node.flags.contains(.permissionDenied) {
-                            Label("Protected locations are shown with reduced color intensity.", systemImage: "lock")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
                     }
-                } else {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Image(systemName: "cursorarrow.click")
-                            .font(.title2)
-                            .foregroundStyle(.secondary)
-                        Text("Select a tile to inspect it.")
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
 
-                Spacer(minLength: 0)
+                VStack(alignment: .leading, spacing: 5) {
+                    InfoRow(label: "Kind", value: detail.kind)
+                    InfoRow(label: "Disk", value: detail.diskUsage)
+                    InfoRow(label: "Size", value: detail.fileSize)
+                }
+                .frame(width: 170)
+
+                VStack(alignment: .leading, spacing: 5) {
+                    InfoRow(label: "Category", value: detail.category)
+                    if let modified = detail.modified {
+                        InfoRow(label: "Modified", value: modified)
+                    }
+                }
+                .frame(width: 185)
+
+                HStack(spacing: 8) {
+                    Button {
+                        model.quickLookSelected()
+                    } label: {
+                        Image(systemName: "eye")
+                    }
+                    .disabled(!detail.canQuickLook)
+                    .help("Quick Look")
+
+                    if let url = detail.url {
+                        Button {
+                            MacActions.reveal(url)
+                        } label: {
+                            Image(systemName: "arrow.up.forward.app")
+                        }
+                        .help("Reveal in Finder")
+
+                        Button {
+                            MacActions.copyPath(url)
+                        } label: {
+                            Image(systemName: "doc.on.doc")
+                        }
+                        .help("Copy Path")
+                    }
+                }
+                .controlSize(.small)
             }
-            .padding(.horizontal, DesignTokens.panelPadding)
-            .padding(.vertical, 16)
+
+            if detail.isProtected {
+                Label("Protected locations are shown with reduced color intensity.", systemImage: "lock")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
-        .background(DesignTokens.sidePanelBackground)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
     }
 }
 
