@@ -51,7 +51,7 @@ SKIP_CODESIGN=1 ./Scripts/package-app.sh
 Output:
 
 ```text
-dist/Spatia-0.1.0.app
+dist/Spatia-X.Y.Z.app
 ```
 
 ## Local DMG
@@ -63,8 +63,8 @@ SKIP_CODESIGN=1 ./Scripts/package-dmg.sh
 Output:
 
 ```text
-dist/Spatia-0.1.0.dmg
-dist/Spatia-0.1.0.dmg.sha256
+dist/Spatia-X.Y.Z.dmg
+dist/Spatia-X.Y.Z.dmg.sha256
 ```
 
 The DMG contains the versioned app bundle and an `Applications` symlink.
@@ -89,8 +89,8 @@ shasum -a 256 --check "${DMG_PATH}.sha256"
 - Run `SKIP_CODESIGN=1 ./Scripts/package-dmg.sh`.
 - Commit and push to `main`.
 - Wait for CI to pass on `main`.
-- Create an annotated tag, for example `git tag -a v0.1.0 -m "Spatia 0.1.0"`.
-- Push the tag, for example `git push origin v0.1.0`.
+- Create an annotated tag, for example `git tag -a v0.1.1 -m "Spatia 0.1.1"`.
+- Push the tag, for example `git push origin v0.1.1`.
 - Review the draft prerelease created by GitHub Actions.
 - Publish only after confirming the unsigned/not-notarized caveat is visible.
 
