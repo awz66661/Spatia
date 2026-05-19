@@ -1,0 +1,85 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check version
+        run: ./Scripts/check-version.sh
+
+      - name: Check environment
+        run: ./Scripts/check-env.sh
+
+      - name: Build
+        run: ./Scripts/build-debug.sh
+
+      - name: Test
+        run: ./Scripts/test.sh
+
+      - name: Package unsigned DMG
+        id: package
+        run: |
+          VERSION="$(cat VERSION | tr -d '[:space:]')"
+          DMG_PATH="$(SKIP_CODESIGN=1 ./Scripts/package-dmg.sh | tail -n 1)"
+          echo "version=${VERSION}" >> "${GITHUB_OUTPUT}"
+          echo "dmg_path=${DMG_PATH}" >> "${GITHUB_OUTPUT}"
+          echo "sha256_path=${DMG_PATH}.sha256" >> "${GITHUB_OUTPUT}"
+
+      - name: Verify DMG
+        run: |
+          DMG_PATH="${{ steps.package.outputs.dmg_path }}"
+          test -f "${DMG_PATH}"
+          test -f "${DMG_PATH}.sha256"
+
+          hdiutil verify "${DMG_PATH}"
+
+          MOUNT_ROOT="$(mktemp -d)"
+          hdiutil attach "${DMG_PATH}" -readonly -nobrowse -mountroot "${MOUNT_ROOT}"
+          VOLUME_PATH="$(find "${MOUNT_ROOT}" -mindepth 1 -maxdepth 1 -type d | head -n 1)"
+          test -n "${VOLUME_PATH}"
+          test -d "${VOLUME_PATH}"/Spatia-*.app
+          test -L "${VOLUME_PATH}/Applications"
+          hdiutil detach "${VOLUME_PATH}"
+
+          shasum -a 256 --check "${DMG_PATH}.sha256"
+
+      - name: Create draft prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.package.outputs.version }}
+          DMG_PATH: ${{ steps.package.outputs.dmg_path }}
+          SHA256_PATH: ${{ steps.package.outputs.sha256_path }}
+        run: |
+          cat > release-notes.md <<EOF
+          Spatia ${VERSION}
+
+          This is an unsigned early prerelease build for manual review.
+
+          Important:
+          - This DMG is not notarized.
+          - macOS may show unidentified-developer or Gatekeeper warnings.
+          - Spatia is a local-first disk space visualizer, not a Mac cleaner.
+          - Deletion is not implemented in this release.
+
+          Assets:
+          - Spatia-${VERSION}.dmg
+          - Spatia-${VERSION}.dmg.sha256
+          EOF
+
+          gh release create "v${VERSION}" \
+            "${DMG_PATH}" \
+            "${SHA256_PATH}" \
+            --draft \
+            --prerelease \
+            --title "Spatia ${VERSION}" \
+            --notes-file release-notes.md

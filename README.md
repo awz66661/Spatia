@@ -8,7 +8,7 @@
 ![macOS](https://img.shields.io/badge/macOS-14%2B-black)
 ![SwiftPM](https://img.shields.io/badge/SwiftPM-compatible-orange)
 [![CI](https://img.shields.io/badge/CI-workflow%20configured-informational)](.github/workflows/ci.yml)
-![Version](https://img.shields.io/badge/version-0.1.0-lightgrey)
+[![Version](https://img.shields.io/badge/version-see%20VERSION-lightgrey)](VERSION)
 
 Spatia is a native macOS disk space visualizer built around a SpaceSniffer-style treemap.
 
@@ -28,7 +28,7 @@ It is a file space map, not a Mac cleaner. Scans are user initiated, results sta
 Spatia is pre-1.0 macOS software.
 
 - Minimum macOS: 14.
-- Current version: 0.1.0.
+- Current version: see [VERSION](VERSION).
 - Distribution target: GitHub Releases.
 - Notarization: deferred for early releases.
 - App Store: not planned for the first phase.
@@ -43,6 +43,7 @@ Requirements:
 - Swift 5.9 or newer
 
 ```sh
+./Scripts/check-version.sh
 ./Scripts/check-env.sh
 ./Scripts/build-debug.sh
 ./Scripts/test.sh
@@ -56,6 +57,8 @@ SKIP_CODESIGN=1 ./Scripts/package-dmg.sh
 ```
 
 Open `Package.swift` in Xcode for native UI work.
+
+Release builds are created from version tags. Pushes to `main` run CI and unsigned packaging smoke tests only; pushing a tag such as `v0.1.0` creates a draft prerelease with the unsigned DMG and checksum attached.
 
 ## Project Layout
 

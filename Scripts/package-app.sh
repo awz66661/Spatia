@@ -5,12 +5,15 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SWIFT_BIN="${SWIFT_BIN:-/usr/bin/swift}"
 INFO_PLIST="${ROOT_DIR}/Resources/Info.plist"
 APP_ICON="${ROOT_DIR}/Resources/AppIcon.icns"
+VERSION_FILE="${ROOT_DIR}/VERSION"
 APP_NAME="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleName' "${INFO_PLIST}")"
-APP_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "${INFO_PLIST}")"
+APP_VERSION="$(tr -d '[:space:]' < "${VERSION_FILE}")"
 APP_DIR="${ROOT_DIR}/dist/${APP_NAME}-${APP_VERSION}.app"
 CONTENTS_DIR="${APP_DIR}/Contents"
 MACOS_DIR="${CONTENTS_DIR}/MacOS"
 RESOURCES_DIR="${CONTENTS_DIR}/Resources"
+
+"${ROOT_DIR}/Scripts/check-version.sh" >&2
 
 export CLANG_MODULE_CACHE_PATH="${ROOT_DIR}/.build/clang-module-cache"
 mkdir -p "${CLANG_MODULE_CACHE_PATH}" "${ROOT_DIR}/.build/swiftpm-cache"

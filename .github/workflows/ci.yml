@@ -10,6 +10,8 @@ jobs:
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
+      - name: Check version
+        run: ./Scripts/check-version.sh
       - name: Check environment
         run: ./Scripts/check-env.sh
       - name: Build
