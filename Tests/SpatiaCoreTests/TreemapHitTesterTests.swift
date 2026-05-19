@@ -3,6 +3,16 @@ import SpatiaCore
 import XCTest
 
 final class TreemapHitTesterTests: XCTestCase {
+    func testTileHashableUsesRectComponents() {
+        let tile = Tile(nodeID: 1, rect: CGRect(x: 0, y: 0, width: 10, height: 10), depth: 0, label: "A", size: 1, kind: .file)
+        let sameTile = Tile(nodeID: 1, rect: CGRect(x: 0, y: 0, width: 10, height: 10), depth: 0, label: "A", size: 1, kind: .file)
+        let differentRect = Tile(nodeID: 1, rect: CGRect(x: 0, y: 0, width: 12, height: 10), depth: 0, label: "A", size: 1, kind: .file)
+
+        XCTAssertEqual(tile, sameTile)
+        XCTAssertNotEqual(tile, differentRect)
+        XCTAssertEqual(Set([tile, sameTile]).count, 1)
+    }
+
     func testHitTestReturnsContainingTile() {
         let tester = TreemapHitTester(gapTolerance: 0)
         let tiles = [

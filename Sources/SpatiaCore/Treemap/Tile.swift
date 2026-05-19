@@ -68,4 +68,34 @@ public struct Tile: Hashable, Sendable {
             height: min(reservedHeaderHeight, rect.height)
         )
     }
+
+    public static func == (lhs: Tile, rhs: Tile) -> Bool {
+        lhs.nodeID == rhs.nodeID &&
+            lhs.rect.origin.x == rhs.rect.origin.x &&
+            lhs.rect.origin.y == rhs.rect.origin.y &&
+            lhs.rect.size.width == rhs.rect.size.width &&
+            lhs.rect.size.height == rhs.rect.size.height &&
+            lhs.depth == rhs.depth &&
+            lhs.label == rhs.label &&
+            lhs.size == rhs.size &&
+            lhs.kind == rhs.kind &&
+            lhs.flags == rhs.flags &&
+            lhs.category == rhs.category &&
+            lhs.reservedHeaderHeight == rhs.reservedHeaderHeight
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(nodeID)
+        hasher.combine(Double(rect.origin.x))
+        hasher.combine(Double(rect.origin.y))
+        hasher.combine(Double(rect.size.width))
+        hasher.combine(Double(rect.size.height))
+        hasher.combine(depth)
+        hasher.combine(label)
+        hasher.combine(size)
+        hasher.combine(kind)
+        hasher.combine(flags)
+        hasher.combine(category)
+        hasher.combine(Double(reservedHeaderHeight))
+    }
 }
