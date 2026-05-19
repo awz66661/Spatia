@@ -1,0 +1,17 @@
+.DS_Store
+/.build/
+/dist/
+/DerivedData/
+/*.xcworkspace/
+xcuserdata/
+*.xcuserstate
+*.moved-aside
+*.dSYM
+*.dSYM.zip
+*.ipa
+*.pkg
+*.dmg
+*.app
+.swiftpm/
+Package.resolved
+.vscode/
