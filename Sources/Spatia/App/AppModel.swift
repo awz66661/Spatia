@@ -12,6 +12,7 @@ final class AppModel: ObservableObject {
     @Published var currentScanURL: URL?
 
     private var scanTask: Task<Void, Never>?
+    private var scanCancellationSource: ScanCancellationSource?
 
     var snapshot: FileTreeSnapshot? {
         result?.snapshot
@@ -83,6 +84,10 @@ final class AppModel: ObservableObject {
 
     func scan(_ url: URL) {
         scanTask?.cancel()
+        scanCancellationSource?.cancel()
+
+        let cancellationSource = ScanCancellationSource()
+        scanCancellationSource = cancellationSource
         isScanning = true
         selectedID = nil
         displayRootID = nil
@@ -90,13 +95,19 @@ final class AppModel: ObservableObject {
         statusText = "Scanning \(url.lastPathComponent.isEmpty ? url.path : url.lastPathComponent)..."
 
         scanTask = Task {
-            let options = ScanOptions(expandPackages: false, includeHiddenFiles: true)
+            let options = ScanOptions(
+                expandPackages: false,
+                includeHiddenFiles: true,
+                cancellationSource: cancellationSource
+            )
             let scanner = FileScanner(options: options)
             let scanResult = await Task.detached(priority: .userInitiated) {
                 scanner.scan(root: url)
             }.value
 
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled, !cancellationSource.isCancelled, scanCancellationSource === cancellationSource else {
+                return
+            }
 
             result = scanResult
             displayRootID = scanResult.snapshot.rootID

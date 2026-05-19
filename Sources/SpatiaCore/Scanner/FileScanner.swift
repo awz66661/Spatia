@@ -5,15 +5,18 @@ public struct ScanOptions: Sendable {
     public var expandPackages: Bool
     public var includeHiddenFiles: Bool
     public var maxDepth: Int?
+    public var cancellationSource: ScanCancellationSource?
 
     public init(
         expandPackages: Bool = false,
         includeHiddenFiles: Bool = true,
-        maxDepth: Int? = nil
+        maxDepth: Int? = nil,
+        cancellationSource: ScanCancellationSource? = nil
     ) {
         self.expandPackages = expandPackages
         self.includeHiddenFiles = includeHiddenFiles
         self.maxDepth = maxDepth
+        self.cancellationSource = cancellationSource
     }
 }
 
@@ -85,6 +88,11 @@ public struct FileScanner: Sendable {
 }
 
 private struct FileTreeBuilder {
+    private struct DirectoryContents {
+        var urls: [URL]
+        var issue: ScanIssue?
+    }
+
     private let options: ScanOptions
     private let fileManager = FileManager.default
     private var nodes: [FileNode] = []
@@ -158,6 +166,11 @@ private struct FileTreeBuilder {
             )
         )
 
+        guard !isCancelled else {
+            nodes[Int(id)].scanState = .skipped
+            return id
+        }
+
         switch kind {
         case .directory, .volume:
             folderCount += 1
@@ -175,22 +188,42 @@ private struct FileTreeBuilder {
             fileCount += 1
         }
 
-        nodes[Int(id)].scanState = .complete
+        if nodes[Int(id)].scanState == .scanning {
+            nodes[Int(id)].scanState = isCancelled ? .skipped : .complete
+        }
         return id
     }
 
     private mutating func scanDirectoryNode(id: NodeID, url: URL, depth: Int) {
+        guard !isCancelled else {
+            nodes[Int(id)].scanState = .skipped
+            return
+        }
+
         guard shouldDescend(depth: depth) else {
             nodes[Int(id)].scanState = .skipped
             return
         }
 
-        let childURLs = contentsOfDirectory(at: url)
+        let contents = contentsOfDirectory(at: url)
+        if contents.issue != nil {
+            markDirectoryReadFailure(nodeID: id)
+            return
+        }
+
         var children: [NodeID] = []
         var logicalSize: Int64 = 0
         var allocatedSize: Int64 = 0
 
-        for childURL in childURLs {
+        for childURL in contents.urls {
+            guard !isCancelled else {
+                nodes[Int(id)].children = children
+                nodes[Int(id)].logicalSize = logicalSize
+                nodes[Int(id)].allocatedSize = allocatedSize
+                nodes[Int(id)].scanState = .skipped
+                return
+            }
+
             let childID = scanNode(at: childURL, parentID: id, depth: depth + 1)
             children.append(childID)
             let child = nodes[Int(childID)]
@@ -204,12 +237,18 @@ private struct FileTreeBuilder {
     }
 
     private mutating func measureOpaqueDirectory(at url: URL, depth: Int) -> (logical: Int64, allocated: Int64) {
+        guard !isCancelled else { return (0, 0) }
         guard shouldDescend(depth: depth) else { return (0, 0) }
 
         var logical: Int64 = 0
         var allocated: Int64 = 0
 
-        for childURL in contentsOfDirectory(at: url) {
+        let contents = contentsOfDirectory(at: url)
+        guard contents.issue == nil else { return (0, 0) }
+
+        for childURL in contents.urls {
+            guard !isCancelled else { return (logical, allocated) }
+
             let values = resourceValues(for: childURL)
             let kind = nodeKind(for: values)
 
@@ -234,26 +273,38 @@ private struct FileTreeBuilder {
         return depth < maxDepth
     }
 
-    private mutating func contentsOfDirectory(at url: URL) -> [URL] {
+    private var isCancelled: Bool {
+        options.cancellationSource?.isCancelled == true
+    }
+
+    private mutating func contentsOfDirectory(at url: URL) -> DirectoryContents {
         var directoryOptions: FileManager.DirectoryEnumerationOptions = []
         if !options.includeHiddenFiles {
             directoryOptions.insert(.skipsHiddenFiles)
         }
 
         do {
-            return try fileManager.contentsOfDirectory(
+            let urls = try fileManager.contentsOfDirectory(
                 at: url,
                 includingPropertiesForKeys: Array(resourceKeys),
                 options: directoryOptions
             )
+            return DirectoryContents(urls: urls, issue: nil)
         } catch {
             let nsError = error as NSError
             let kind: ScanIssueKind = nsError.domain == NSCocoaErrorDomain && nsError.code == NSFileReadNoPermissionError
                 ? .permissionDenied
                 : .unreadable
-            issues.append(ScanIssue(url: url, kind: kind, message: error.localizedDescription))
-            return []
+            let issue = ScanIssue(url: url, kind: kind, message: error.localizedDescription)
+            issues.append(issue)
+            return DirectoryContents(urls: [], issue: issue)
         }
+    }
+
+    private mutating func markDirectoryReadFailure(nodeID: NodeID) {
+        nodes[Int(nodeID)].flags.insert(.permissionDenied)
+        nodes[Int(nodeID)].children = []
+        nodes[Int(nodeID)].scanState = .failed
     }
 
     private func resourceValues(for url: URL) -> URLResourceValues? {

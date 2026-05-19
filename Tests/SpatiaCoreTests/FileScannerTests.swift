@@ -126,6 +126,28 @@ final class FileScannerTests: XCTestCase {
         XCTAssertEqual(result.summary.fileCount, 2)
     }
 
+    func testPreCancelledScanDoesNotDescendIntoFixture() throws {
+        let fixture = try ScannerFixture()
+        defer { try? fixture.tearDown() }
+
+        for index in 0..<10 {
+            try fixture.file("folder-\(index)/nested-\(index)/payload.dat", bytes: 5)
+        }
+
+        let cancellationSource = ScanCancellationSource()
+        cancellationSource.cancel()
+
+        let result = FileScanner(
+            options: ScanOptions(cancellationSource: cancellationSource)
+        ).scan(root: fixture.rootURL)
+        let root = try XCTUnwrap(result.snapshot.root)
+
+        XCTAssertEqual(result.summary.fileCount, 0)
+        XCTAssertEqual(result.summary.folderCount, 0)
+        XCTAssertTrue(root.children.isEmpty)
+        XCTAssertEqual(root.scanState, .skipped)
+    }
+
     func testUnreadableDirectoryProducesPermissionIssueWhenSupported() throws {
         let fixture = try ScannerFixture()
         defer { try? fixture.tearDown() }
@@ -143,7 +165,12 @@ final class FileScannerTests: XCTestCase {
         guard result.issues.contains(where: { $0.url == locked && $0.kind == .permissionDenied }) else {
             throw XCTSkip("This environment allowed reading the chmod 000 fixture directory.")
         }
+        let root = try XCTUnwrap(result.snapshot.root)
+        let lockedNode = try XCTUnwrap(fixture.child(named: "locked", in: root, snapshot: result.snapshot))
 
         XCTAssertEqual(result.summary.fileCount, 0)
+        XCTAssertTrue(lockedNode.flags.contains(.permissionDenied))
+        XCTAssertEqual(lockedNode.scanState, .failed)
+        XCTAssertTrue(lockedNode.children.isEmpty)
     }
 }
