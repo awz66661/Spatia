@@ -65,6 +65,7 @@ final class TreemapNSView: NSView {
         options: RecursiveTreemapBuildOptions(maxDepth: 3, childInset: 8, minimumParentArea: 1_600)
     )
     private let hitTester = TreemapHitTester(gapTolerance: 1)
+    private let labelPolicy = TreemapLabelPolicy()
 
     override var isFlipped: Bool { true }
     override var acceptsFirstResponder: Bool { true }
@@ -184,22 +185,32 @@ final class TreemapNSView: NSView {
     }
 
     private func drawLabel(for tile: Tile, in rect: CGRect) {
-        let area = rect.width * rect.height
-        guard area >= 1_500, rect.width >= 52, rect.height >= 20 else { return }
+        let mode = labelPolicy.mode(for: tile)
+        guard mode != .none else { return }
 
-        let inset = tile.depth == 0 ? CGFloat(8) : CGFloat(6)
-        let labelRect = rect.insetBy(dx: inset, dy: inset - 1)
-        guard labelRect.width > 12, labelRect.height > 12 else { return }
+        let labelRect: CGRect
+        if mode == .containerTitle {
+            labelRect = CGRect(
+                x: rect.minX + 8,
+                y: rect.minY + 4,
+                width: max(0, rect.width - 16),
+                height: max(0, tile.reservedHeaderHeight - 6)
+            )
+        } else {
+            let inset = tile.depth == 0 ? CGFloat(8) : CGFloat(6)
+            labelRect = rect.insetBy(dx: inset, dy: inset - 1)
+        }
+        guard labelRect.width > 12, labelRect.height > 10 else { return }
 
         let paragraph = NSMutableParagraphStyle()
         paragraph.lineBreakMode = .byTruncatingTail
 
-        let drawSize = area >= 5_400 && rect.width >= 76 && rect.height >= 42
+        let drawSize = mode == .titleAndSize
         let titleFontSize = fittingFontSize(
             for: tile.label,
             width: labelRect.width,
             minSize: 9,
-            maxSize: tile.depth == 0 ? 12 : 11,
+            maxSize: mode == .containerTitle || tile.depth == 0 ? 12 : 11,
             weight: .medium
         )
 
@@ -220,7 +231,7 @@ final class TreemapNSView: NSView {
         guard titleHeight >= 10 else { return }
 
         NSGraphicsContext.saveGraphicsState()
-        NSBezierPath(roundedRect: labelRect, xRadius: 2, yRadius: 2).setClip()
+        NSBezierPath(rect: labelRect).setClip()
 
         NSString(string: tile.label).draw(
             in: CGRect(x: labelRect.minX, y: labelRect.minY, width: labelRect.width, height: titleHeight),

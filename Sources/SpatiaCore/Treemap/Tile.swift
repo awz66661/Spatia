@@ -35,6 +35,7 @@ public struct Tile: Hashable, Sendable {
     public var kind: NodeKind
     public var flags: NodeFlags
     public var category: FileCategory
+    public var reservedHeaderHeight: CGFloat
 
     public init(
         nodeID: NodeID,
@@ -44,7 +45,8 @@ public struct Tile: Hashable, Sendable {
         size: Int64,
         kind: NodeKind,
         flags: NodeFlags = [],
-        category: FileCategory = .other
+        category: FileCategory = .other,
+        reservedHeaderHeight: CGFloat = 0
     ) {
         self.nodeID = nodeID
         self.rect = rect
@@ -54,5 +56,16 @@ public struct Tile: Hashable, Sendable {
         self.kind = kind
         self.flags = flags
         self.category = category
+        self.reservedHeaderHeight = reservedHeaderHeight
+    }
+
+    public var reservedHeaderRect: CGRect {
+        guard reservedHeaderHeight > 0 else { return .null }
+        return CGRect(
+            x: rect.minX,
+            y: rect.minY,
+            width: rect.width,
+            height: min(reservedHeaderHeight, rect.height)
+        )
     }
 }

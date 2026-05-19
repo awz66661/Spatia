@@ -24,6 +24,37 @@ final class RecursiveTreemapBuilderTests: XCTestCase {
         XCTAssertEqual(child.size, 70)
     }
 
+    func testNestedChildrenDoNotOverlapReservedParentHeader() {
+        let snapshot = nestedSnapshot()
+        let builder = RecursiveTreemapBuilder(
+            layout: SquarifiedTreemapLayout(
+                minTileArea: 0,
+                maxItems: 20,
+                contentPadding: 0,
+                readableWeightExponent: 0.88,
+                orientationPolicy: .spaceSniffer
+            ),
+            options: RecursiveTreemapBuildOptions(
+                maxDepth: 3,
+                childInset: 4,
+                minimumParentArea: 100,
+                reservedHeaderHeight: 24
+            )
+        )
+
+        let tiles = builder.build(snapshot: snapshot, rootID: 0, in: CGRect(x: 0, y: 0, width: 320, height: 200))
+        let parent = try! XCTUnwrap(tiles.first { $0.nodeID == 1 && $0.depth == 0 })
+        let childTiles = tiles.filter { $0.depth == 1 }
+
+        XCTAssertGreaterThan(parent.reservedHeaderHeight, 0)
+        for child in childTiles {
+            XCTAssertFalse(
+                parent.reservedHeaderRect.intersects(child.rect),
+                "\(child.rect) should not overlap reserved header \(parent.reservedHeaderRect)"
+            )
+        }
+    }
+
     func testOtherSmallFilesKeepsActualAggregateSizeAndSyntheticID() {
         let snapshot = nestedSnapshot()
         let builder = RecursiveTreemapBuilder(

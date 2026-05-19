@@ -6,17 +6,20 @@ public struct RecursiveTreemapBuildOptions: Hashable, Sendable {
     public var childInset: CGFloat
     public var minimumParentArea: CGFloat
     public var minimumChildSide: CGFloat
+    public var reservedHeaderHeight: CGFloat
 
     public init(
         maxDepth: Int = 3,
         childInset: CGFloat = 8,
         minimumParentArea: CGFloat = 1_800,
-        minimumChildSide: CGFloat = 26
+        minimumChildSide: CGFloat = 26,
+        reservedHeaderHeight: CGFloat = 22
     ) {
         self.maxDepth = maxDepth
         self.childInset = childInset
         self.minimumParentArea = minimumParentArea
         self.minimumChildSide = minimumChildSide
+        self.reservedHeaderHeight = reservedHeaderHeight
     }
 }
 
@@ -75,17 +78,19 @@ public struct RecursiveTreemapBuilder: Sendable {
 
         guard depth + 1 < options.maxDepth else { return tiles }
 
-        let parentTiles = tiles
-        for tile in parentTiles where shouldRenderChildren(for: tile) {
+        for index in tiles.indices where shouldRenderChildren(for: tiles[index]) {
+            var tile = tiles[index]
             guard let childNode = snapshot[tile.nodeID], !visibleChildren(of: childNode, in: snapshot).isEmpty else {
                 continue
             }
 
-            let childRect = insetForChildren(tile.rect, depth: depth)
+            tile.reservedHeaderHeight = headerHeight(for: tile.rect, depth: depth)
+            let childRect = insetForChildren(tile, depth: depth)
             guard childRect.width >= options.minimumChildSide, childRect.height >= options.minimumChildSide else {
                 continue
             }
 
+            tiles[index] = tile
             tiles.append(contentsOf: buildChildren(of: childNode, in: snapshot, rect: childRect, depth: depth + 1))
         }
 
@@ -109,9 +114,21 @@ public struct RecursiveTreemapBuilder: Sendable {
         return tile.rect.width * tile.rect.height >= options.minimumParentArea
     }
 
-    private func insetForChildren(_ rect: CGRect, depth: Int) -> CGRect {
+    private func insetForChildren(_ tile: Tile, depth: Int) -> CGRect {
         let inset = max(3, options.childInset - CGFloat(depth * 2))
-        return rect.insetBy(dx: inset, dy: inset + 3)
+        let insetRect = tile.rect.insetBy(dx: inset, dy: inset)
+        let headerHeight = min(tile.reservedHeaderHeight, max(0, insetRect.height - options.minimumChildSide))
+        return CGRect(
+            x: insetRect.minX,
+            y: insetRect.minY + headerHeight,
+            width: insetRect.width,
+            height: max(0, insetRect.height - headerHeight)
+        )
+    }
+
+    private func headerHeight(for rect: CGRect, depth: Int) -> CGFloat {
+        guard rect.width >= 72, rect.height >= 44 else { return 0 }
+        return max(18, options.reservedHeaderHeight - CGFloat(depth * 2))
     }
 
     private func tile(for node: FileNode, rect: CGRect, depth: Int) -> Tile {

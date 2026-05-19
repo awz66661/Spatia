@@ -29,7 +29,7 @@
 - [x] Other small files behavior review
 - [x] Recursive SpaceSniffer-style treemap depth
 - [x] Readability-first visual weighting
-- [x] Compatible Liquid Glass sidebar and inspector
+- [x] Unified solid-color three-column utility layout
 
 ## v0.3 Safe Actions
 

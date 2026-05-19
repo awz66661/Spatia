@@ -31,6 +31,11 @@ let package = Package(
             name: "SpatiaCoreTests",
             dependencies: ["SpatiaCore"],
             path: "Tests/SpatiaCoreTests"
+        ),
+        .testTarget(
+            name: "SpatiaTests",
+            dependencies: ["Spatia", "SpatiaCore"],
+            path: "Tests/SpatiaTests"
         )
     ]
 )

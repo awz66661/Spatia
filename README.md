@@ -27,7 +27,7 @@ This repository is initialized as a Swift Package with:
 - `Docs`: product, architecture, permissions, roadmap, testing, and release notes
 - `Scripts`: local environment check, build, test, and GitHub Release packaging helpers
 
-The current explorer build includes common scan sources, a compatible glass sidebar and inspector, recursive SpaceSniffer-style treemap rendering, Quick Look, Reveal in Finder, Copy Path, and a consolidated permission issue summary.
+The current explorer build includes common scan sources, a unified three-column utility layout, recursive SpaceSniffer-style treemap rendering, Quick Look, Reveal in Finder, Copy Path, and a consolidated permission issue summary.
 
 ## Local Development
 

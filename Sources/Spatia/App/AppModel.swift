@@ -30,37 +30,6 @@ final class AppModel: ObservableObject {
         return snapshot?[selectedID]
     }
 
-    var visibleInputs: [TreemapInput] {
-        guard let snapshot, let root = displayRoot else { return [] }
-        let children = snapshot.children(of: root.id)
-            .filter { $0.allocatedSize > 0 }
-            .sorted { $0.allocatedSize > $1.allocatedSize }
-
-        if children.isEmpty, root.allocatedSize > 0 {
-            return [
-                TreemapInput(
-                    nodeID: root.id,
-                    label: root.name,
-                size: root.allocatedSize,
-                kind: root.kind,
-                flags: root.flags,
-                category: FileCategoryClassifier.category(for: root)
-            )
-            ]
-        }
-
-        return children.map {
-            TreemapInput(
-                nodeID: $0.id,
-                label: $0.name,
-                size: $0.allocatedSize,
-                kind: $0.kind,
-                flags: $0.flags,
-                category: FileCategoryClassifier.category(for: $0)
-            )
-        }
-    }
-
     var breadcrumb: [FileNode] {
         guard let snapshot, let displayRoot else { return [] }
         return snapshot.breadcrumb(for: displayRoot.id)
@@ -165,6 +134,13 @@ final class AppModel: ObservableObject {
     func goUp() {
         guard let displayRoot, let parentID = displayRoot.parentID else { return }
         displayRootID = parentID
+        selectedID = nil
+    }
+
+    func navigateToBreadcrumb(_ id: NodeID) {
+        guard let snapshot, snapshot[id] != nil else { return }
+        guard breadcrumb.contains(where: { $0.id == id }) else { return }
+        displayRootID = id
         selectedID = nil
     }
 }

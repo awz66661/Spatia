@@ -27,7 +27,7 @@ Spatia
 - `RecursiveTreemapBuilder` builds 2-3 visible levels from a `FileTreeSnapshot`.
 - `SquarifiedTreemapLayout` supports readability-first weighting and a SpaceSniffer-style alternating orientation policy.
 - `FileCategoryClassifier` maps scanner metadata, UTType hints, extensions, and protected paths into stable visual categories.
-- `GlassPanel` uses `NSGlassEffectView` on macOS 26+ and falls back to `NSVisualEffectView` on macOS 14/15.
+- `MainWindowView` uses a solid-color top bar plus a three-column utility layout with stable separators.
 
 ## Planned Production Shape
 
