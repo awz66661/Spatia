@@ -1,5 +1,4 @@
 import Foundation
-import UniformTypeIdentifiers
 
 public struct ScanOptions: Sendable {
     public var expandPackages: Bool
@@ -212,6 +211,7 @@ private struct FileScanEngine {
 
     private struct ResourceRead {
         var values: URLResourceValues?
+        var typeIdentifier: String?
         var issue: ScanIssue?
     }
 
@@ -299,7 +299,7 @@ private struct FileScanEngine {
             url: url,
             kind: kind,
             flags: flags,
-            typeIdentifier: typeIdentifier(for: url, values: values),
+            typeIdentifier: resourceRead.typeIdentifier,
             logicalSize: fileLogicalSize(values),
             allocatedSize: fileAllocatedSize(values),
             modifiedAt: values?.contentModificationDate,
@@ -476,14 +476,16 @@ private struct FileScanEngine {
 
     private mutating func resourceValues(for url: URL) -> ResourceRead {
         do {
+            let values = try resourceValuesProvider(url, resourceKeys)
             return ResourceRead(
-                values: try resourceValuesProvider(url, resourceKeys),
+                values: values,
+                typeIdentifier: optionalTypeIdentifier(for: url),
                 issue: nil
             )
         } catch {
             let issue = scanIssue(url: url, error: error)
             receive(.issue(issue))
-            return ResourceRead(values: nil, issue: issue)
+            return ResourceRead(values: nil, typeIdentifier: nil, issue: issue)
         }
     }
 
@@ -501,18 +503,8 @@ private struct FileScanEngine {
         return ScanIssue(url: url, kind: kind, message: error.localizedDescription)
     }
 
-    private func typeIdentifier(for url: URL, values: URLResourceValues?) -> String? {
-        if let typeIdentifier = values?.typeIdentifier {
-            return typeIdentifier
-        }
-
-        if let typeIdentifier = try? url.resourceValues(forKeys: [.typeIdentifierKey]).typeIdentifier {
-            return typeIdentifier
-        }
-
-        let pathExtension = url.pathExtension
-        guard !pathExtension.isEmpty else { return nil }
-        return UTType(filenameExtension: pathExtension)?.identifier
+    private func optionalTypeIdentifier(for url: URL) -> String? {
+        try? resourceValuesProvider(url, [.typeIdentifierKey]).typeIdentifier
     }
 
     private func nodeKind(for values: URLResourceValues?) -> NodeKind {

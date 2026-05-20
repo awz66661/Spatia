@@ -106,17 +106,26 @@ final class FileScannerTests: XCTestCase {
         XCTAssertEqual(names, ["visible.txt"])
     }
 
-    func testReadsTypeIdentifierWhenAvailable() throws {
+    func testTypeIdentifierLookupFailureDoesNotFailNode() throws {
         let fixture = try ScannerFixture()
         defer { try? fixture.tearDown() }
 
         try fixture.file("photo.png", bytes: 8)
 
-        let result = FileScanner().scan(root: fixture.rootURL)
+        let scanner = FileScanner(resourceValuesProvider: { url, keys in
+            if keys == [.typeIdentifierKey] {
+                throw NSError(domain: NSCocoaErrorDomain, code: 123, userInfo: nil)
+            }
+            return try url.resourceValues(forKeys: keys)
+        })
+
+        let result = scanner.scan(root: fixture.rootURL)
         let root = try XCTUnwrap(result.snapshot.root)
         let image = try XCTUnwrap(fixture.child(named: "photo.png", in: root, snapshot: result.snapshot))
 
-        XCTAssertNotNil(image.typeIdentifier)
+        XCTAssertNil(image.typeIdentifier)
+        XCTAssertEqual(image.scanState, .complete)
+        XCTAssertTrue(result.issues.isEmpty)
     }
 
     func testResourceValueFailureProducesUnreadableIssueAndFailedNode() throws {
