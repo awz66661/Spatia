@@ -69,17 +69,6 @@ struct MainWindowView: View {
                     .help("Cancel Scan")
                 }
             }
-
-            ToolbarItem(placement: .primaryAction) {
-                Button {
-                    model.isRightInspectorVisible.toggle()
-                } label: {
-                    Label("Inspector", systemImage: "sidebar.trailing")
-                }
-                .labelStyle(.iconOnly)
-                .disabled(model.snapshot == nil)
-                .help(model.isRightInspectorVisible ? "Hide Inspector" : "Show Inspector")
-            }
         }
         .inspector(
             isPresented: Binding(
@@ -164,6 +153,16 @@ private struct TreemapDetailView: View {
                         )
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .padding(DesignTokens.treemapInset)
+
+                        if !model.isRightInspectorVisible {
+                            HStack {
+                                Spacer(minLength: 0)
+                                InspectorRevealButton()
+                                    .padding(.trailing, 18)
+                                    .padding(.top, 12)
+                            }
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                        }
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
@@ -177,5 +176,22 @@ private struct TreemapDetailView: View {
             }
         }
         .background(DesignTokens.windowBackground)
+    }
+}
+
+private struct InspectorRevealButton: View {
+    @EnvironmentObject private var model: AppModel
+
+    var body: some View {
+        Button {
+            model.isRightInspectorVisible = true
+        } label: {
+            Label("Show Inspector", systemImage: "sidebar.trailing")
+                .labelStyle(.iconOnly)
+                .frame(width: 34, height: 34)
+        }
+        .buttonStyle(.plain)
+        .glassEffect(.regular, in: Circle())
+        .help("Show Inspector")
     }
 }

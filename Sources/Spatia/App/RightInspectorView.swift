@@ -55,6 +55,17 @@ struct RightInspectorView: View {
         }
         .listStyle(.sidebar)
         .navigationTitle("Inspector")
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    model.isRightInspectorVisible = false
+                } label: {
+                    Label("Hide Inspector", systemImage: "sidebar.trailing")
+                }
+                .labelStyle(.iconOnly)
+                .help("Hide Inspector")
+            }
+        }
     }
 }
 
