@@ -35,21 +35,9 @@ struct MainWindowView: View {
                 .frame(minWidth: DesignTokens.detailMinWidth)
         }
         .navigationSplitViewStyle(.prominentDetail)
-        .toolbar(removing: .sidebarToggle)
         .toolbar {
-            ToolbarItem(placement: .navigation) {
+            ToolbarItemGroup(placement: .primaryAction) {
                 ControlGroup {
-                    Button {
-                        toggleSourceSidebar()
-                    } label: {
-                        Label(
-                            isSourceSidebarVisible ? "Hide Source Sidebar" : "Show Source Sidebar",
-                            systemImage: "sidebar.leading"
-                        )
-                    }
-                    .labelStyle(.iconOnly)
-                    .help(isSourceSidebarVisible ? "Hide Source Sidebar" : "Show Source Sidebar")
-
                     ScanFolderButton()
 
                     Button {
@@ -100,14 +88,6 @@ struct MainWindowView: View {
             placement: .toolbar,
             prompt: "Name, path, kind, or category"
         )
-    }
-
-    private var isSourceSidebarVisible: Bool {
-        columnVisibility != .detailOnly
-    }
-
-    private func toggleSourceSidebar() {
-        columnVisibility = isSourceSidebarVisible ? .detailOnly : .all
     }
 }
 

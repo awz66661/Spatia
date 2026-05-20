@@ -34,9 +34,6 @@ struct SidebarView: View {
                         SourceActionRow(title: "Home", systemImage: "house") {
                             model.scanHome()
                         }
-                        SourceActionRow(title: "Choose Folder...", systemImage: "folder.badge.plus") {
-                            model.chooseFolder()
-                        }
                     }
                 }
 
