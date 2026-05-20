@@ -459,6 +459,60 @@ final class AppModelNavigationTests: XCTestCase {
         XCTAssertFalse(model.isScanning)
     }
 
+    func testScanPreferencesBuildScannerOptions() {
+        let cancellationSource = ScanCancellationSource()
+        let preferences = ScanPreferences(
+            expandPackages: true,
+            includeHiddenFiles: false,
+            maxDepth: 2
+        )
+
+        let options = preferences.scanOptions(cancellationSource: cancellationSource)
+
+        XCTAssertTrue(options.expandPackages)
+        XCTAssertFalse(options.includeHiddenFiles)
+        XCTAssertEqual(options.maxDepth, 2)
+        XCTAssertTrue(options.cancellationSource === cancellationSource)
+    }
+
+    func testScanUsesCurrentPreferences() async throws {
+        let model = AppModel()
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try "visible".write(
+            to: root.appendingPathComponent("visible.txt"),
+            atomically: true,
+            encoding: .utf8
+        )
+        try "hidden".write(
+            to: root.appendingPathComponent(".hidden.txt"),
+            atomically: true,
+            encoding: .utf8
+        )
+        let nested = root.appendingPathComponent("nested", isDirectory: true)
+        try FileManager.default.createDirectory(at: nested, withIntermediateDirectories: true)
+        try "deep".write(
+            to: nested.appendingPathComponent("deep.txt"),
+            atomically: true,
+            encoding: .utf8
+        )
+        defer {
+            try? FileManager.default.removeItem(at: root)
+        }
+
+        model.setIncludeHiddenFiles(false)
+        model.setMaxDepth(1)
+
+        model.scan(root)
+        await waitForScanResult(model)
+
+        XCTAssertEqual(model.result?.summary.fileCount, 1)
+        XCTAssertEqual(model.result?.summary.folderCount, 2)
+        XCTAssertEqual(model.result?.summary.logicalBytes, 7)
+        XCTAssertEqual(model.result?.snapshot.root?.children.count, 2)
+    }
+
     func testStartingNewScanClearsPreviousResultImmediately() async throws {
         let model = AppModel()
         model.result = ScanResult(

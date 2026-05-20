@@ -10,6 +10,7 @@ final class AppModel: ObservableObject {
     @Published var isScanning = false
     @Published var statusText = "Choose a folder to scan."
     @Published var currentScanURL: URL?
+    @Published var scanPreferences = ScanPreferences()
     @Published private var expandedTreemapNodeIDsStorage: Set<NodeID> = []
 
     var confirmMoveToTrash: (TrashConfirmation) -> Bool = MacActions.confirmMoveToTrash
@@ -180,13 +181,10 @@ final class AppModel: ObservableObject {
         expandedTreemapNodeIDsStorage = []
         currentScanURL = url
         statusText = "Scanning \(url.lastPathComponent.isEmpty ? url.path : url.lastPathComponent)..."
+        let scanPreferences = scanPreferences
 
         scanTask = Task {
-            let options = ScanOptions(
-                expandPackages: false,
-                includeHiddenFiles: true,
-                cancellationSource: cancellationSource
-            )
+            let options = scanPreferences.scanOptions(cancellationSource: cancellationSource)
             let scanner = FileScanner(options: options)
             let scanResult = await Task.detached(priority: .userInitiated) {
                 scanner.scan(root: url)
@@ -209,6 +207,24 @@ final class AppModel: ObservableObject {
 
         guard let resolvedID else { return }
         expandedTreemapNodeIDsStorage.formUnion(expansionPathNodeIDs(for: resolvedID))
+    }
+
+    func setIncludeHiddenFiles(_ includeHiddenFiles: Bool) {
+        var preferences = scanPreferences
+        preferences.includeHiddenFiles = includeHiddenFiles
+        scanPreferences = preferences
+    }
+
+    func setExpandPackages(_ expandPackages: Bool) {
+        var preferences = scanPreferences
+        preferences.expandPackages = expandPackages
+        scanPreferences = preferences
+    }
+
+    func setMaxDepth(_ maxDepth: Int?) {
+        var preferences = scanPreferences
+        preferences.maxDepth = maxDepth
+        scanPreferences = preferences
     }
 
     func enterSelectedDirectory() {
@@ -456,6 +472,21 @@ struct ScanOverview: Hashable {
     var fileCount: String
     var folderCount: String
     var duration: String
+}
+
+struct ScanPreferences: Hashable {
+    var expandPackages = false
+    var includeHiddenFiles = true
+    var maxDepth: Int?
+
+    func scanOptions(cancellationSource: ScanCancellationSource? = nil) -> ScanOptions {
+        ScanOptions(
+            expandPackages: expandPackages,
+            includeHiddenFiles: includeHiddenFiles,
+            maxDepth: maxDepth,
+            cancellationSource: cancellationSource
+        )
+    }
 }
 
 struct DisplayRootChildSummary: Identifiable, Hashable {

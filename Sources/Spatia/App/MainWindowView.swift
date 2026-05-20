@@ -159,6 +159,34 @@ private struct ScanSourceMenu: View {
 
             Divider()
 
+            Menu("Scan Options", systemImage: "slider.horizontal.3") {
+                Toggle(isOn: Binding(
+                    get: { model.scanPreferences.includeHiddenFiles },
+                    set: { model.setIncludeHiddenFiles($0) }
+                )) {
+                    Label("Include Hidden Files", systemImage: "eye")
+                }
+
+                Toggle(isOn: Binding(
+                    get: { model.scanPreferences.expandPackages },
+                    set: { model.setExpandPackages($0) }
+                )) {
+                    Label("Expand Packages", systemImage: "shippingbox")
+                }
+
+                Divider()
+
+                Menu("Depth Limit", systemImage: "square.stack.3d.down.right") {
+                    DepthLimitButton(title: "No Limit", depth: nil)
+                    DepthLimitButton(title: "1 Level", depth: 1)
+                    DepthLimitButton(title: "2 Levels", depth: 2)
+                    DepthLimitButton(title: "3 Levels", depth: 3)
+                    DepthLimitButton(title: "5 Levels", depth: 5)
+                }
+            }
+
+            Divider()
+
             Button("Choose Folder...", systemImage: "folder.badge.plus") {
                 model.chooseFolder()
             }
@@ -167,6 +195,24 @@ private struct ScanSourceMenu: View {
         }
         .labelStyle(.iconOnly)
         .help("Scan Source")
+    }
+}
+
+private struct DepthLimitButton: View {
+    @EnvironmentObject private var model: AppModel
+    var title: String
+    var depth: Int?
+
+    var body: some View {
+        Button {
+            model.setMaxDepth(depth)
+        } label: {
+            if model.scanPreferences.maxDepth == depth {
+                Label(title, systemImage: "checkmark")
+            } else {
+                Text(title)
+            }
+        }
     }
 }
 
