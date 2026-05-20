@@ -18,6 +18,57 @@ struct SpatiaApp: App {
                 }
                 .keyboardShortcut("o", modifiers: [.command])
             }
+
+            CommandMenu("Scan") {
+                Button("Rescan") {
+                    model.rescanCurrentSource()
+                }
+                .keyboardShortcut("r", modifiers: [.command])
+                .disabled(model.currentScanURL == nil || model.isScanning)
+            }
+
+            CommandMenu("Item") {
+                Button("Enter Selected Item") {
+                    model.enterSelectedDirectory()
+                }
+                .keyboardShortcut(.return, modifiers: [])
+                .disabled(!model.canEnterSelectedContainer)
+
+                Button("Up") {
+                    model.goUp()
+                }
+                .keyboardShortcut(.upArrow, modifiers: [.command])
+                .disabled(model.displayRoot?.parentID == nil)
+
+                Divider()
+
+                Button("Quick Look") {
+                    model.quickLookSelected()
+                }
+                .keyboardShortcut(.space, modifiers: [])
+                .disabled(!model.canQuickLookSelected)
+
+                Button("Reveal in Finder") {
+                    model.revealSelectedInFinder()
+                }
+                .disabled(!model.canRevealSelected)
+
+                Button("Copy Path") {
+                    model.copySelectedPath()
+                }
+                .keyboardShortcut("c", modifiers: [.command])
+                .disabled(!model.canCopySelectedPath)
+
+                Divider()
+
+                Button("Move to Trash") {
+                    Task {
+                        await model.moveSelectedItemToTrash()
+                    }
+                }
+                .keyboardShortcut(.delete, modifiers: [])
+                .disabled(!model.canMoveSelectedToTrash)
+            }
         }
     }
 }

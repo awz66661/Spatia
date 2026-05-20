@@ -229,6 +229,69 @@ final class AppModelNavigationTests: XCTestCase {
         XCTAssertEqual(model.statusText, "Quick Look is unavailable for small.txt.")
     }
 
+    func testSelectedItemCommandAvailabilityReflectsSelection() {
+        let model = AppModel()
+        model.result = ScanResult(
+            snapshot: sidebarSnapshot(),
+            summary: ScanSummary(
+                rootURL: URL(fileURLWithPath: "/tmp/root", isDirectory: true),
+                fileCount: 2,
+                folderCount: 3,
+                logicalBytes: 100,
+                allocatedBytes: 100,
+                duration: 1
+            ),
+            issues: []
+        )
+        model.displayRootID = 0
+
+        XCTAssertFalse(model.canEnterSelectedContainer)
+        XCTAssertFalse(model.canQuickLookSelected)
+        XCTAssertFalse(model.canCopySelectedPath)
+
+        model.selectedID = 1
+
+        XCTAssertTrue(model.canEnterSelectedContainer)
+        XCTAssertFalse(model.canQuickLookSelected)
+        XCTAssertTrue(model.canCopySelectedPath)
+        XCTAssertTrue(model.canRevealSelected)
+        XCTAssertTrue(model.canMoveSelectedToTrash)
+
+        model.selectedID = 3
+
+        XCTAssertFalse(model.canEnterSelectedContainer)
+        XCTAssertTrue(model.canQuickLookSelected)
+        XCTAssertTrue(model.canCopySelectedPath)
+    }
+
+    func testCopySelectedPathUsesSelectedURLAndUpdatesStatus() {
+        let model = AppModel()
+        model.result = ScanResult(
+            snapshot: sidebarSnapshot(),
+            summary: ScanSummary(
+                rootURL: URL(fileURLWithPath: "/tmp/root", isDirectory: true),
+                fileCount: 2,
+                folderCount: 3,
+                logicalBytes: 100,
+                allocatedBytes: 100,
+                duration: 1
+            ),
+            issues: []
+        )
+        model.displayRootID = 0
+        model.selectedID = 3
+
+        var copiedURL: URL?
+        model.copyPathToPasteboard = {
+            copiedURL = $0
+        }
+
+        model.copySelectedPath()
+
+        XCTAssertEqual(copiedURL?.path, "/tmp/root/small.txt")
+        XCTAssertEqual(model.statusText, "Copied path for small.txt.")
+    }
+
     func testExpandedTreemapNodeIDsAreEmptyWithoutSelection() {
         let model = AppModel()
         model.result = ScanResult(

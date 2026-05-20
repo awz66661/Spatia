@@ -17,6 +17,8 @@ final class AppModel: ObservableObject {
     var confirmMoveToTrash: (TrashConfirmation) -> Bool = MacActions.confirmMoveToTrash
     var moveToTrash: (URL) async -> TrashActionResult = MacActions.moveToTrash
     var quickLookFile: (URL) -> QuickLookResult = MacActions.quickLook
+    var revealInFinder: (URL) -> Void = MacActions.reveal
+    var copyPathToPasteboard: (URL) -> Void = MacActions.copyPath
 
     private var scanTask: Task<Void, Never>?
     private var scanCancellationSource: ScanCancellationSource?
@@ -129,6 +131,28 @@ final class AppModel: ObservableObject {
     var canQuickLookSelected: Bool {
         guard let selectedNode else { return false }
         return canQuickLook(selectedNode)
+    }
+
+    var canEnterSelectedContainer: Bool {
+        guard let selectedID,
+              selectedID != syntheticOtherNodeID,
+              let node = snapshot?[selectedID] else {
+            return false
+        }
+        return isNavigableContainer(node)
+    }
+
+    var canRevealSelected: Bool {
+        selectedNode?.url != nil
+    }
+
+    var canCopySelectedPath: Bool {
+        selectedNode?.url != nil
+    }
+
+    var canMoveSelectedToTrash: Bool {
+        guard let selectedNode else { return false }
+        return trashActionState(for: selectedNode).canMoveToTrash
     }
 
     func scanDownloads() {
@@ -274,6 +298,23 @@ final class AppModel: ObservableObject {
     func quickLookSelected() {
         guard let selectedID else { return }
         quickLook(selectedID)
+    }
+
+    func revealSelectedInFinder() {
+        guard let node = selectedNode, let url = node.url else {
+            statusText = "Choose an item to reveal in Finder."
+            return
+        }
+        revealInFinder(url)
+    }
+
+    func copySelectedPath() {
+        guard let node = selectedNode, let url = node.url else {
+            statusText = "Choose an item to copy its path."
+            return
+        }
+        copyPathToPasteboard(url)
+        statusText = "Copied path for \(displayName(for: node))."
     }
 
     func quickLook(_ id: NodeID) {

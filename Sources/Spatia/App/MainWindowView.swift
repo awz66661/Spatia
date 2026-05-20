@@ -544,16 +544,16 @@ private struct SelectionActionGroup: View {
             .disabled(!detail.canQuickLook)
             .help("Quick Look")
 
-            if let url = detail.url {
+            if detail.url != nil {
                 Button {
-                    MacActions.reveal(url)
+                    model.revealSelectedInFinder()
                 } label: {
                     Image(systemName: "arrow.up.forward.app")
                 }
                 .help("Reveal in Finder")
 
                 Button {
-                    MacActions.copyPath(url)
+                    model.copySelectedPath()
                 } label: {
                     Image(systemName: "doc.on.doc")
                 }
