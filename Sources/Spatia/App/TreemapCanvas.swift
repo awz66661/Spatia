@@ -9,6 +9,9 @@ struct TreemapCanvas: NSViewRepresentable {
     @Binding var selectedID: NodeID?
     var onActivate: (NodeID) -> Void
     var onPreview: (NodeID) -> Void
+    var onReveal: (NodeID) -> Void
+    var onCopyPath: (NodeID) -> Void
+    var onMoveToTrash: (NodeID) -> Void
     var onSyntheticOtherSelect: (Int64) -> Void
 
     func makeNSView(context: Context) -> TreemapNSView {
@@ -16,6 +19,9 @@ struct TreemapCanvas: NSViewRepresentable {
         view.onSelect = { selectedID = $0 }
         view.onActivate = onActivate
         view.onPreview = onPreview
+        view.onReveal = onReveal
+        view.onCopyPath = onCopyPath
+        view.onMoveToTrash = onMoveToTrash
         view.onSyntheticOtherSelect = onSyntheticOtherSelect
         return view
     }
@@ -28,6 +34,9 @@ struct TreemapCanvas: NSViewRepresentable {
         nsView.onSelect = { selectedID = $0 }
         nsView.onActivate = onActivate
         nsView.onPreview = onPreview
+        nsView.onReveal = onReveal
+        nsView.onCopyPath = onCopyPath
+        nsView.onMoveToTrash = onMoveToTrash
         nsView.onSyntheticOtherSelect = onSyntheticOtherSelect
     }
 }
@@ -65,6 +74,13 @@ private struct TreemapLayoutCache {
     var tiles: [Tile]
 }
 
+private enum KeyboardDirection {
+    case left
+    case right
+    case up
+    case down
+}
+
 final class TreemapNSView: NSView {
     var snapshot: FileTreeSnapshot? {
         didSet { needsDisplay = true }
@@ -90,6 +106,9 @@ final class TreemapNSView: NSView {
     var onSelect: ((NodeID?) -> Void)?
     var onActivate: ((NodeID) -> Void)?
     var onPreview: ((NodeID) -> Void)?
+    var onReveal: ((NodeID) -> Void)?
+    var onCopyPath: ((NodeID) -> Void)?
+    var onMoveToTrash: ((NodeID) -> Void)?
     var onSyntheticOtherSelect: ((Int64) -> Void)?
 
     private var renderedTiles: [Tile] = []
@@ -126,6 +145,7 @@ final class TreemapNSView: NSView {
     private let labelPolicy = TreemapLabelPolicy()
     private let doubleClickTargetTolerance: CGFloat = 6
     private var pendingDoubleClickTarget: MouseDownTarget?
+    private var contextMenuTile: Tile?
 
     override var isFlipped: Bool { true }
     override var acceptsFirstResponder: Bool { true }
@@ -220,7 +240,65 @@ final class TreemapNSView: NSView {
             onPreview?(selectedID)
             return
         }
+
+        switch event.specialKey {
+        case .leftArrow:
+            moveSelection(.left)
+            return
+        case .rightArrow:
+            moveSelection(.right)
+            return
+        case .upArrow:
+            moveSelection(.up)
+            return
+        case .downArrow:
+            moveSelection(.down)
+            return
+        default:
+            break
+        }
+
+        switch event.charactersIgnoringModifiers {
+        case "\r", "\u{3}":
+            if let selectedTile = renderedTiles.first(where: { $0.nodeID == selectedID }),
+               canActivate(selectedTile) {
+                onActivate?(selectedTile.nodeID)
+                return
+            }
+        case "\u{7F}":
+            if let selectedID, selectedID != syntheticOtherNodeID {
+                onMoveToTrash?(selectedID)
+                return
+            }
+        case "\u{1B}":
+            select(nil)
+            return
+        default:
+            break
+        }
+
         super.keyDown(with: event)
+    }
+
+    override func menu(for event: NSEvent) -> NSMenu? {
+        let point = convert(event.locationInWindow, from: nil)
+        guard let tile = hitTester.hitTest(point: point, tiles: renderedTiles),
+              tile.nodeID != syntheticOtherNodeID else {
+            contextMenuTile = nil
+            return nil
+        }
+
+        select(tile)
+        contextMenuTile = tile
+
+        let menu = NSMenu()
+        addMenuItem("Enter", action: #selector(enterContextMenuTile), to: menu, enabled: canActivate(tile))
+        addMenuItem("Quick Look", action: #selector(previewContextMenuTile), to: menu, enabled: tile.kind == .file)
+        addMenuItem("Reveal in Finder", action: #selector(revealContextMenuTile), to: menu)
+        addMenuItem("Copy Path", action: #selector(copyContextMenuTilePath), to: menu)
+        menu.addItem(.separator())
+        addMenuItem("Move to Trash", action: #selector(moveContextMenuTileToTrash), to: menu)
+        return menu
     }
 
     private func select(_ tile: Tile?) {
@@ -230,6 +308,108 @@ final class TreemapNSView: NSView {
         } else {
             onSelect?(tile?.nodeID)
         }
+    }
+
+    private func moveSelection(_ direction: KeyboardDirection) {
+        guard !renderedTiles.isEmpty else { return }
+
+        guard let selectedID,
+              let currentTile = renderedTiles.first(where: { $0.nodeID == selectedID }) else {
+            select(firstKeyboardTile())
+            return
+        }
+
+        guard let next = neighboringTile(from: currentTile, direction: direction) else { return }
+        select(next)
+    }
+
+    private func firstKeyboardTile() -> Tile? {
+        renderedTiles
+            .filter { $0.nodeID != syntheticOtherNodeID }
+            .sorted { lhs, rhs in
+                if lhs.rect.minY == rhs.rect.minY {
+                    return lhs.rect.minX < rhs.rect.minX
+                }
+                return lhs.rect.minY < rhs.rect.minY
+            }
+            .first
+    }
+
+    private func neighboringTile(from tile: Tile, direction: KeyboardDirection) -> Tile? {
+        let origin = center(of: tile.rect)
+        let candidates = renderedTiles.filter { candidate in
+            guard candidate.nodeID != tile.nodeID else { return false }
+            let candidateCenter = center(of: candidate.rect)
+            switch direction {
+            case .left:
+                return candidateCenter.x < origin.x
+            case .right:
+                return candidateCenter.x > origin.x
+            case .up:
+                return candidateCenter.y < origin.y
+            case .down:
+                return candidateCenter.y > origin.y
+            }
+        }
+
+        return candidates.min { lhs, rhs in
+            score(lhs, from: origin, direction: direction) < score(rhs, from: origin, direction: direction)
+        }
+    }
+
+    private func score(_ tile: Tile, from origin: CGPoint, direction: KeyboardDirection) -> CGFloat {
+        let target = center(of: tile.rect)
+        switch direction {
+        case .left, .right:
+            return abs(target.x - origin.x) + abs(target.y - origin.y) * 0.45
+        case .up, .down:
+            return abs(target.y - origin.y) + abs(target.x - origin.x) * 0.45
+        }
+    }
+
+    private func center(of rect: CGRect) -> CGPoint {
+        CGPoint(x: rect.midX, y: rect.midY)
+    }
+
+    private func canActivate(_ tile: Tile) -> Bool {
+        tile.nodeID != syntheticOtherNodeID && (tile.kind == .directory || tile.kind == .package)
+    }
+
+    private func addMenuItem(
+        _ title: String,
+        action: Selector,
+        to menu: NSMenu,
+        enabled: Bool = true
+    ) {
+        let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
+        item.target = self
+        item.isEnabled = enabled
+        menu.addItem(item)
+    }
+
+    @objc private func enterContextMenuTile() {
+        guard let contextMenuTile, canActivate(contextMenuTile) else { return }
+        onActivate?(contextMenuTile.nodeID)
+    }
+
+    @objc private func previewContextMenuTile() {
+        guard let contextMenuTile, contextMenuTile.nodeID != syntheticOtherNodeID else { return }
+        onPreview?(contextMenuTile.nodeID)
+    }
+
+    @objc private func revealContextMenuTile() {
+        guard let contextMenuTile, contextMenuTile.nodeID != syntheticOtherNodeID else { return }
+        onReveal?(contextMenuTile.nodeID)
+    }
+
+    @objc private func copyContextMenuTilePath() {
+        guard let contextMenuTile, contextMenuTile.nodeID != syntheticOtherNodeID else { return }
+        onCopyPath?(contextMenuTile.nodeID)
+    }
+
+    @objc private func moveContextMenuTileToTrash() {
+        guard let contextMenuTile, contextMenuTile.nodeID != syntheticOtherNodeID else { return }
+        onMoveToTrash?(contextMenuTile.nodeID)
     }
 
     private func doubleClickTarget(at point: CGPoint, fallback tile: Tile?) -> Tile? {

@@ -111,6 +111,20 @@ private struct TreemapDetailView: View {
                     onPreview: { nodeID in
                         model.quickLook(nodeID)
                     },
+                    onReveal: { nodeID in
+                        model.select(nodeID)
+                        model.revealSelectedInFinder()
+                    },
+                    onCopyPath: { nodeID in
+                        model.select(nodeID)
+                        model.copySelectedPath()
+                    },
+                    onMoveToTrash: { nodeID in
+                        model.select(nodeID)
+                        Task {
+                            await model.moveSelectedItemToTrash()
+                        }
+                    },
                     onSyntheticOtherSelect: { size in
                         model.selectSyntheticOther(size: size)
                     }
