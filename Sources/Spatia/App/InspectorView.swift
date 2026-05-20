@@ -96,11 +96,12 @@ private struct SelectionActionGroup: View {
     var detail: SelectionDetail
 
     var body: some View {
-        HStack(spacing: 8) {
+        ControlGroup {
             Button {
                 model.quickLookSelected()
             } label: {
-                Image(systemName: "eye")
+                Label("Quick Look", systemImage: "eye")
+                    .labelStyle(.iconOnly)
             }
             .disabled(!detail.canQuickLook)
             .help("Quick Look")
@@ -112,7 +113,8 @@ private struct SelectionActionGroup: View {
                             await model.expandSelectedPackage()
                         }
                     } label: {
-                        Image(systemName: "square.stack.3d.down.right")
+                        Label("Expand Package", systemImage: "square.stack.3d.down.right")
+                            .labelStyle(.iconOnly)
                     }
                     .help("Expand Package")
                 }
@@ -120,14 +122,16 @@ private struct SelectionActionGroup: View {
                 Button {
                     model.revealSelectedInFinder()
                 } label: {
-                    Image(systemName: "arrow.up.forward.app")
+                    Label("Reveal in Finder", systemImage: "arrow.up.forward.app")
+                        .labelStyle(.iconOnly)
                 }
                 .help("Reveal in Finder")
 
                 Button {
                     model.copySelectedPath()
                 } label: {
-                    Image(systemName: "doc.on.doc")
+                    Label("Copy Path", systemImage: "doc.on.doc")
+                        .labelStyle(.iconOnly)
                 }
                 .help("Copy Path")
             }
@@ -137,7 +141,8 @@ private struct SelectionActionGroup: View {
                     await model.moveSelectedItemToTrash()
                 }
             } label: {
-                Image(systemName: "trash")
+                Label("Move to Trash", systemImage: "trash")
+                    .labelStyle(.iconOnly)
             }
             .disabled(!detail.canMoveToTrash)
             .help(detail.canMoveToTrash ? "Move to Trash" : detail.trashDisabledReason ?? "Move to Trash unavailable")

@@ -25,6 +25,29 @@ final class FileTreeSearchTests: XCTestCase {
         XCTAssertTrue(snapshot.search(query: "movie", rootedAt: 1).isEmpty)
     }
 
+    func testSearchIndexStoresScopedEntriesAndMatchesFields() {
+        let snapshot = searchSnapshot()
+
+        let index = FileSearchIndex(snapshot: snapshot, rootedAt: 0)
+
+        XCTAssertEqual(index.rootID, 0)
+        XCTAssertEqual(index.entries.map(\.nodeID), [1, 3, 4, 2])
+        XCTAssertEqual(index.entries.first?.relativePath, "Projects")
+        XCTAssertTrue(index.entries.first?.matchText.contains("directory") == true)
+        XCTAssertEqual(index.search(query: "video").map(\.nodeID), [2])
+    }
+
+    func testLargeWideSearchUsesBoundedTopResults() {
+        let snapshot = largeWideSnapshot(fileCount: 10_000)
+        let index = FileSearchIndex(snapshot: snapshot, rootedAt: 0)
+
+        let results = index.search(query: "match", limit: 30)
+
+        XCTAssertEqual(results.count, 30)
+        XCTAssertEqual(results.first?.nodeID, 10_000)
+        XCTAssertEqual(results.last?.nodeID, 9_971)
+    }
+
     private func searchSnapshot() -> FileTreeSnapshot {
         FileTreeSnapshot(
             nodes: [
@@ -78,5 +101,36 @@ final class FileTreeSearchTests: XCTestCase {
             ],
             rootID: 0
         )
+    }
+
+    private func largeWideSnapshot(fileCount: Int) -> FileTreeSnapshot {
+        var nodes = [
+            FileNode(
+                id: 0,
+                parentID: nil,
+                name: "root",
+                url: URL(fileURLWithPath: "/tmp/root", isDirectory: true),
+                kind: .directory,
+                logicalSize: Int64(fileCount),
+                allocatedSize: Int64(fileCount),
+                children: (1...NodeID(fileCount)).map { $0 }
+            )
+        ]
+
+        for index in 1...fileCount {
+            nodes.append(
+                FileNode(
+                    id: NodeID(index),
+                    parentID: 0,
+                    name: "match-\(index).dat",
+                    url: URL(fileURLWithPath: "/tmp/root/match-\(index).dat"),
+                    kind: .file,
+                    logicalSize: Int64(index),
+                    allocatedSize: Int64(index)
+                )
+            )
+        }
+
+        return FileTreeSnapshot(nodes: nodes, rootID: 0)
     }
 }

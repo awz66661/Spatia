@@ -30,21 +30,37 @@ public extension FileTreeSnapshot {
     func largestDescendantFiles(rootedAt rootID: NodeID, limit: Int) -> [RankedNodeUsage] {
         guard limit > 0, let root = self[rootID], root.allocatedSize > 0 else { return [] }
 
-        var ranked: [FileNode] = []
-        var stack = Array(root.children.reversed())
-        while let id = stack.popLast() {
-            guard let node = self[id] else { continue }
-            if isRankableFileLikeLeaf(node, rootID: rootID) {
-                insertRanked(node, rootedAt: rootID, into: &ranked, limit: limit)
-            }
-            stack.append(contentsOf: node.children.reversed())
+        var ranked: [RankedFileCandidate] = []
+        var stack = root.children.reversed().compactMap { childID -> (NodeID, String)? in
+            guard let child = self[childID] else { return nil }
+            return (child.id, displayName(for: child))
         }
 
-        return ranked.map { node in
+        while let (id, relativePath) = stack.popLast() {
+            guard let node = self[id] else { continue }
+            if isRankableFileLikeLeaf(node, rootID: rootID) {
+                insertRanked(
+                    RankedFileCandidate(
+                        nodeID: node.id,
+                        allocatedBytes: node.allocatedSize,
+                        relativePath: relativePath
+                    ),
+                    into: &ranked,
+                    limit: limit
+                )
+            }
+
+            for childID in node.children.reversed() {
+                guard let child = self[childID] else { continue }
+                stack.append((child.id, relativePath + "/" + displayName(for: child)))
+            }
+        }
+
+        return ranked.map { candidate in
             RankedNodeUsage(
-                nodeID: node.id,
-                allocatedBytes: node.allocatedSize,
-                shareOfRoot: share(node.allocatedSize, of: root.allocatedSize)
+                nodeID: candidate.nodeID,
+                allocatedBytes: candidate.allocatedBytes,
+                shareOfRoot: share(candidate.allocatedBytes, of: root.allocatedSize)
             )
         }
     }
@@ -53,7 +69,20 @@ public extension FileTreeSnapshot {
         guard let root = self[rootID], root.allocatedSize > 0 else { return [] }
 
         var totals: [FileCategory: (allocatedBytes: Int64, itemCount: Int)] = [:]
-        for node in usageLeaves(rootedAt: rootID) where node.allocatedSize > 0 {
+        var stack = [root.id]
+        while let id = stack.popLast(), let node = self[id] {
+            guard node.allocatedSize > 0 else { continue }
+
+            var hasPositiveChildren = false
+            for childID in node.children.reversed() {
+                guard let child = self[childID], child.allocatedSize > 0 else { continue }
+                hasPositiveChildren = true
+                stack.append(child.id)
+            }
+            if hasPositiveChildren {
+                continue
+            }
+
             let category = FileCategoryClassifier.category(for: node)
             let current = totals[category] ?? (allocatedBytes: 0, itemCount: 0)
             totals[category] = (
@@ -103,22 +132,6 @@ public extension FileTreeSnapshot {
         return path.isEmpty ? displayName(for: node) : path.joined(separator: "/")
     }
 
-    private func usageLeaves(rootedAt rootID: NodeID) -> [FileNode] {
-        guard let root = self[rootID] else { return [] }
-
-        var leaves: [FileNode] = []
-        var stack = [root.id]
-        while let id = stack.popLast(), let node = self[id] {
-            let positiveChildren = children(of: node.id).filter { $0.allocatedSize > 0 }
-            if positiveChildren.isEmpty {
-                leaves.append(node)
-            } else {
-                stack.append(contentsOf: positiveChildren.map(\.id).reversed())
-            }
-        }
-        return leaves
-    }
-
     private func isRankableFileLikeLeaf(_ node: FileNode, rootID: NodeID) -> Bool {
         guard node.id != rootID, node.allocatedSize > 0, node.children.isEmpty else { return false }
 
@@ -130,15 +143,15 @@ public extension FileTreeSnapshot {
         }
     }
 
-    private func insertRanked(_ node: FileNode, rootedAt rootID: NodeID, into ranked: inout [FileNode], limit: Int) {
-        ranked.append(node)
-        ranked.sort { lhs, rhs in
-            if lhs.allocatedSize == rhs.allocatedSize {
-                return (relativePath(from: rootID, to: lhs.id) ?? lhs.name)
-                    .localizedStandardCompare(relativePath(from: rootID, to: rhs.id) ?? rhs.name) == .orderedAscending
+    private func insertRanked(_ candidate: RankedFileCandidate, into ranked: inout [RankedFileCandidate], limit: Int) {
+        let insertionIndex = ranked.firstIndex { existing in
+            if existing.allocatedBytes == candidate.allocatedBytes {
+                return candidate.relativePath.localizedStandardCompare(existing.relativePath) == .orderedAscending
             }
-            return lhs.allocatedSize > rhs.allocatedSize
-        }
+            return candidate.allocatedBytes > existing.allocatedBytes
+        } ?? ranked.endIndex
+
+        ranked.insert(candidate, at: insertionIndex)
         if ranked.count > limit {
             ranked.removeLast(ranked.count - limit)
         }
@@ -153,4 +166,10 @@ public extension FileTreeSnapshot {
         if !node.name.isEmpty { return node.name }
         return node.url?.lastPathComponent.isEmpty == false ? node.url?.lastPathComponent ?? node.name : node.url?.path ?? node.name
     }
+}
+
+private struct RankedFileCandidate {
+    var nodeID: NodeID
+    var allocatedBytes: Int64
+    var relativePath: String
 }

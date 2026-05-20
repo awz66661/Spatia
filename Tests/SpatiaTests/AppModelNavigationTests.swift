@@ -132,7 +132,7 @@ final class AppModelNavigationTests: XCTestCase {
         XCTAssertEqual(model.selectedID, 1)
     }
 
-    func testLargestDisplayRootChildrenAreSortedByAllocatedSize() {
+    func testLargestDisplayRootChildrenAreSortedByAllocatedSize() async {
         let model = AppModel()
         model.result = ScanResult(
             snapshot: sidebarSnapshot(),
@@ -147,6 +147,10 @@ final class AppModelNavigationTests: XCTestCase {
             issues: []
         )
         model.displayRootID = 0
+
+        await waitForSidebarDerivedState(model, mode: .here) {
+            model.largestDisplayRootChildren.count == 3
+        }
 
         XCTAssertEqual(model.largestDisplayRootChildren.map(\.id), [2, 1, 3])
         XCTAssertEqual(model.largestDisplayRootChildren.map(\.sizeText), [
@@ -156,7 +160,7 @@ final class AppModelNavigationTests: XCTestCase {
         ])
     }
 
-    func testLargestDescendantFileSummariesAreScopedAndSortedByAllocatedSize() {
+    func testLargestDescendantFileSummariesAreScopedAndSortedByAllocatedSize() async {
         let model = AppModel()
         model.result = ScanResult(
             snapshot: sidebarSnapshot(),
@@ -171,6 +175,11 @@ final class AppModelNavigationTests: XCTestCase {
             issues: []
         )
         model.displayRootID = 0
+        model.sidebarInsightMode = .files
+
+        await waitForSidebarDerivedState(model, mode: .files) {
+            model.largestDescendantFileSummaries.count == 3
+        }
 
         XCTAssertEqual(model.largestDescendantFileSummaries.map(\.id), [5, 4, 3])
         XCTAssertEqual(model.largestDescendantFileSummaries.map(\.relativePath), [
@@ -182,11 +191,15 @@ final class AppModelNavigationTests: XCTestCase {
 
         model.displayRootID = 1
 
+        await waitForSidebarDerivedState(model, mode: .files) {
+            model.largestDescendantFileSummaries.map(\.id) == [4]
+        }
+
         XCTAssertEqual(model.largestDescendantFileSummaries.map(\.id), [4])
         XCTAssertEqual(model.largestDescendantFileSummaries.first?.shareText, "100%")
     }
 
-    func testCategoryUsageSummariesAreScopedToDisplayRoot() {
+    func testCategoryUsageSummariesAreScopedToDisplayRoot() async {
         let model = AppModel()
         model.result = ScanResult(
             snapshot: sidebarSnapshot(),
@@ -201,6 +214,11 @@ final class AppModelNavigationTests: XCTestCase {
             issues: []
         )
         model.displayRootID = 0
+        model.sidebarInsightMode = .types
+
+        await waitForSidebarDerivedState(model, mode: .types) {
+            !model.categoryUsageSummaries.isEmpty
+        }
 
         let rootUsage = Dictionary(uniqueKeysWithValues: model.categoryUsageSummaries.map { ($0.category, $0) })
         XCTAssertEqual(model.categoryUsageSummaries.reduce(Int64(0)) { $0 + $1.allocatedBytes }, 100)
@@ -213,11 +231,15 @@ final class AppModelNavigationTests: XCTestCase {
 
         model.displayRootID = 2
 
+        await waitForSidebarDerivedState(model, mode: .types) {
+            model.categoryUsageSummaries.first?.allocatedBytes == 50
+        }
+
         XCTAssertEqual(model.categoryUsageSummaries.first?.allocatedBytes, 50)
         XCTAssertEqual(model.categoryUsageSummaries.first?.itemCount, 1)
     }
 
-    func testSidebarInsightsRefreshWhenSnapshotChanges() {
+    func testSidebarInsightsRefreshWhenSnapshotChanges() async {
         let model = AppModel()
         model.result = ScanResult(
             snapshot: sidebarSnapshot(),
@@ -232,8 +254,17 @@ final class AppModelNavigationTests: XCTestCase {
             issues: []
         )
         model.displayRootID = 0
+        model.sidebarInsightMode = .files
 
+        await waitForSidebarDerivedState(model, mode: .files) {
+            model.largestDescendantFileSummaries.first?.id == 5
+        }
         XCTAssertEqual(model.largestDescendantFileSummaries.first?.id, 5)
+
+        model.sidebarInsightMode = .types
+        await waitForSidebarDerivedState(model, mode: .types) {
+            model.categoryUsageSummaries.first?.allocatedBytes == 80
+        }
         XCTAssertEqual(model.categoryUsageSummaries.first?.allocatedBytes, 80)
 
         var snapshot = sidebarSnapshot()
@@ -256,7 +287,16 @@ final class AppModelNavigationTests: XCTestCase {
             issues: []
         )
 
+        model.sidebarInsightMode = .files
+        await waitForSidebarDerivedState(model, mode: .files) {
+            model.largestDescendantFileSummaries.first?.id == 4
+        }
         XCTAssertEqual(model.largestDescendantFileSummaries.first?.id, 4)
+
+        model.sidebarInsightMode = .types
+        await waitForSidebarDerivedState(model, mode: .types) {
+            Dictionary(uniqueKeysWithValues: model.categoryUsageSummaries.map { ($0.category, $0) })[.other]?.allocatedBytes == 140
+        }
         let usage = Dictionary(uniqueKeysWithValues: model.categoryUsageSummaries.map { ($0.category, $0) })
         XCTAssertEqual(usage[.other]?.allocatedBytes, 140)
     }
@@ -284,7 +324,7 @@ final class AppModelNavigationTests: XCTestCase {
         XCTAssertEqual(model.expandedTreemapNodeIDs, [2])
     }
 
-    func testSearchResultsAreScopedToDisplayRootAndOpenBySelectingNode() {
+    func testSearchResultsAreScopedToDisplayRootAndOpenBySelectingNode() async {
         let model = AppModel()
         model.result = ScanResult(
             snapshot: sidebarSnapshot(),
@@ -301,6 +341,10 @@ final class AppModelNavigationTests: XCTestCase {
         model.displayRootID = 0
         model.searchQuery = "large"
 
+        await waitForSearchResults(model, query: "large") {
+            model.searchResultSummaries.map(\.id) == [2, 5]
+        }
+
         XCTAssertEqual(model.searchResultSummaries.map(\.id), [2, 5])
 
         model.openInsightItem(5)
@@ -310,7 +354,98 @@ final class AppModelNavigationTests: XCTestCase {
 
         model.displayRootID = 1
 
+        await waitForSearchResults(model, query: "large") {
+            model.searchResultSummaries.isEmpty
+        }
+
         XCTAssertTrue(model.searchResultSummaries.isEmpty)
+    }
+
+    func testSearchDebouncesAndOnlyPublishesLatestQuery() async {
+        let model = AppModel()
+        model.result = ScanResult(
+            snapshot: sidebarSnapshot(),
+            summary: ScanSummary(
+                rootURL: URL(fileURLWithPath: "/tmp/root", isDirectory: true),
+                fileCount: 2,
+                folderCount: 3,
+                logicalBytes: 100,
+                allocatedBytes: 100,
+                duration: 1
+            ),
+            issues: []
+        )
+        model.displayRootID = 0
+
+        model.searchQuery = "large"
+        XCTAssertTrue(model.searchState.isLoading)
+        XCTAssertTrue(model.searchResultSummaries.isEmpty)
+
+        model.searchQuery = "small"
+
+        await waitForSearchResults(model, query: "small") {
+            model.searchResultSummaries.map(\.id) == [3]
+        }
+
+        XCTAssertEqual(model.searchResultSummaries.map(\.id), [3])
+        XCTAssertEqual(model.searchState.query, "small")
+    }
+
+    func testStartingScanCancelsPendingSearchWriteback() async {
+        let model = AppModel()
+        model.result = ScanResult(
+            snapshot: sidebarSnapshot(),
+            summary: ScanSummary(
+                rootURL: URL(fileURLWithPath: "/tmp/root", isDirectory: true),
+                fileCount: 2,
+                folderCount: 3,
+                logicalBytes: 100,
+                allocatedBytes: 100,
+                duration: 1
+            ),
+            issues: []
+        )
+        model.displayRootID = 0
+        model.searchQuery = "large"
+        model.scanEvents = { _, options, _ in
+            while options.cancellationSource?.isCancelled == false {
+                Thread.sleep(forTimeInterval: 0.01)
+            }
+        }
+
+        model.scan(URL(fileURLWithPath: "/tmp/slow-root", isDirectory: true))
+        try? await Task.sleep(nanoseconds: 320_000_000)
+
+        XCTAssertTrue(model.searchResultSummaries.isEmpty)
+        XCTAssertEqual(model.searchState.query, "large")
+
+        model.cancelScan()
+    }
+
+    func testSidebarDerivedStateOnlyComputesActiveMode() async {
+        let model = AppModel()
+        model.result = ScanResult(
+            snapshot: sidebarSnapshot(),
+            summary: ScanSummary(
+                rootURL: URL(fileURLWithPath: "/tmp/root", isDirectory: true),
+                fileCount: 2,
+                folderCount: 3,
+                logicalBytes: 100,
+                allocatedBytes: 100,
+                duration: 1
+            ),
+            issues: []
+        )
+        model.displayRootID = 0
+        model.sidebarInsightMode = .files
+
+        await waitForSidebarDerivedState(model, mode: .files) {
+            model.largestDescendantFileSummaries.count == 3
+        }
+
+        XCTAssertTrue(model.largestDisplayRootChildren.isEmpty)
+        XCTAssertTrue(model.categoryUsageSummaries.isEmpty)
+        XCTAssertEqual(model.largestDescendantFileSummaries.map(\.id), [5, 4, 3])
     }
 
     func testSelectedNodeDetailIncludesUsageShares() {
@@ -1213,6 +1348,40 @@ final class AppModelNavigationTests: XCTestCase {
     private func waitForProgressiveSnapshot(_ model: AppModel, timeout: TimeInterval = 2) async {
         let deadline = Date().addingTimeInterval(timeout)
         while (model.snapshot == nil || model.result != nil) && Date() < deadline {
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+    }
+
+    private func waitForSidebarDerivedState(
+        _ model: AppModel,
+        mode: SidebarInsightMode,
+        timeout: TimeInterval = 2,
+        condition: @escaping () -> Bool
+    ) async {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if model.sidebarDerivedState.mode == mode,
+               !model.sidebarDerivedState.isLoading,
+               condition() {
+                return
+            }
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+    }
+
+    private func waitForSearchResults(
+        _ model: AppModel,
+        query: String,
+        timeout: TimeInterval = 2,
+        condition: @escaping () -> Bool
+    ) async {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if model.searchState.query == query,
+               !model.searchState.isLoading,
+               condition() {
+                return
+            }
             try? await Task.sleep(nanoseconds: 10_000_000)
         }
     }

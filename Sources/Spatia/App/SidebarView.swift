@@ -38,6 +38,14 @@ struct SidebarView: View {
                 Color.clear
                     .frame(height: DesignTokens.sidebarTitlebarInset)
             }
+            .searchable(
+                text: Binding(
+                    get: { model.searchQuery },
+                    set: { model.searchQuery = $0 }
+                ),
+                placement: .sidebar,
+                prompt: "Name, path, kind, or category"
+            )
         }
     }
 }
@@ -154,7 +162,9 @@ private struct SidebarInsightsView: View {
 
         switch model.sidebarInsightMode {
         case .here:
-            if model.largestDisplayRootChildren.isEmpty {
+            if model.isSidebarInsightLoading {
+                SidebarLoadingInsightView(text: "Loading largest items...")
+            } else if model.largestDisplayRootChildren.isEmpty {
                 SidebarEmptyInsightView(
                     text: model.snapshot == nil
                         ? "Scan a folder to browse its largest items."
@@ -172,7 +182,9 @@ private struct SidebarInsightsView: View {
                 }
             }
         case .files:
-            if model.largestDescendantFileSummaries.isEmpty {
+            if model.isSidebarInsightLoading {
+                SidebarLoadingInsightView(text: "Loading large files...")
+            } else if model.largestDescendantFileSummaries.isEmpty {
                 SidebarEmptyInsightView(
                     text: model.snapshot == nil
                         ? "Scan a folder to find large files."
@@ -190,7 +202,9 @@ private struct SidebarInsightsView: View {
                 }
             }
         case .types:
-            if model.categoryUsageSummaries.isEmpty {
+            if model.isSidebarInsightLoading {
+                SidebarLoadingInsightView(text: "Loading type usage...")
+            } else if model.categoryUsageSummaries.isEmpty {
                 SidebarEmptyInsightView(
                     text: model.snapshot == nil
                         ? "Scan a folder to summarize types."
@@ -202,16 +216,10 @@ private struct SidebarInsightsView: View {
                 }
             }
         case .search:
-            SearchField(
-                text: Binding(
-                    get: { model.searchQuery },
-                    set: { model.searchQuery = $0 }
-                )
-            )
-            .listRowInsets(EdgeInsets(top: 6, leading: 14, bottom: 7, trailing: 14))
-
             if model.searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 SidebarEmptyInsightView(text: "Search names, paths, kinds, or categories in the current view.")
+            } else if model.isSearchLoading {
+                SidebarLoadingInsightView(text: "Searching...")
             } else if model.searchResultSummaries.isEmpty {
                 SidebarEmptyInsightView(text: "No matches in the current view.")
             } else {
@@ -226,16 +234,6 @@ private struct SidebarInsightsView: View {
                 }
             }
         }
-    }
-}
-
-private struct SearchField: View {
-    @Binding var text: String
-
-    var body: some View {
-        TextField("Search", text: $text)
-            .textFieldStyle(.roundedBorder)
-            .controlSize(.small)
     }
 }
 
@@ -263,6 +261,21 @@ private struct SidebarEmptyInsightView: View {
             .font(.caption)
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+private struct SidebarLoadingInsightView: View {
+    var text: String
+
+    var body: some View {
+        HStack(spacing: 8) {
+            ProgressView()
+                .controlSize(.mini)
+            Text(text)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 2)
     }
 }
 

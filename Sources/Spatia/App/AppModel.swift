@@ -4,16 +4,46 @@ import SwiftUI
 
 @MainActor
 final class AppModel: ObservableObject {
-    @Published var result: ScanResult?
+    @Published var result: ScanResult? {
+        didSet {
+            scheduleSidebarDerivedRefresh(force: true)
+            scheduleSearchRefresh(debounce: false)
+        }
+    }
+
     @Published var selectedID: NodeID?
-    @Published var displayRootID: NodeID?
+    @Published var displayRootID: NodeID? {
+        didSet {
+            scheduleSidebarDerivedRefresh(force: true)
+            scheduleSearchRefresh(debounce: false)
+        }
+    }
+
     @Published var isScanning = false
     @Published var statusText = "Choose a folder to scan."
     @Published var currentScanURL: URL?
     @Published var scanPreferences = ScanPreferences()
-    @Published var sidebarInsightMode: SidebarInsightMode = .here
-    @Published var searchQuery = ""
-    @Published private var partialScanSnapshot: FileTreeSnapshot?
+    @Published var sidebarInsightMode: SidebarInsightMode = .here {
+        didSet {
+            scheduleSidebarDerivedRefresh(force: true)
+        }
+    }
+
+    @Published var searchQuery = "" {
+        didSet {
+            scheduleSearchRefresh(debounce: true)
+        }
+    }
+
+    @Published private(set) var sidebarDerivedState = SidebarDerivedState.empty(mode: .here)
+    @Published private(set) var searchState = SearchState.empty(query: "")
+    @Published private var partialScanSnapshot: FileTreeSnapshot? {
+        didSet {
+            scheduleSidebarDerivedRefresh(force: false)
+            scheduleSearchRefresh(debounce: false)
+        }
+    }
+
     @Published private var partialScanIssues: [ScanIssue] = []
     @Published private var scanProgress: ScanProgress?
     @Published private var syntheticOtherSelection: SyntheticOtherSelection?
@@ -33,7 +63,12 @@ final class AppModel: ObservableObject {
 
     private var scanTask: Task<Void, Never>?
     private var scanCancellationSource: ScanCancellationSource?
-    private var sidebarInsightCache: SidebarInsightCache?
+    private var activeDerivedTask: Task<Void, Never>?
+    private var activeSearchTask: Task<Void, Never>?
+    private var derivedGeneration = 0
+    private var searchGeneration = 0
+    private var lastProgressiveDerivedRefresh = Date.distantPast
+    private var searchIndexCache: SearchIndexCache?
     private var hoveredTreemapNodeID: NodeID?
     private var hoverStatusRestoreText: String?
     private let pathRiskPolicy = PathRiskPolicy()
@@ -115,32 +150,27 @@ final class AppModel: ObservableObject {
     }
 
     var largestDisplayRootChildren: [DisplayRootChildSummary] {
-        cachedSidebarInsights()?.largestDisplayRootChildren ?? []
+        sidebarDerivedState.largestDisplayRootChildren
     }
 
     var largestDescendantFileSummaries: [DescendantFileSummary] {
-        cachedSidebarInsights()?.largestDescendantFileSummaries ?? []
+        sidebarDerivedState.largestDescendantFileSummaries
     }
 
     var categoryUsageSummaries: [CategoryUsageSummary] {
-        cachedSidebarInsights()?.categoryUsageSummaries ?? []
+        sidebarDerivedState.categoryUsageSummaries
     }
 
     var searchResultSummaries: [SearchResultSummary] {
-        guard let snapshot, let displayRoot else { return [] }
+        searchState.results
+    }
 
-        return snapshot.search(query: searchQuery, rootedAt: displayRoot.id, limit: 30)
-            .map { result in
-                SearchResultSummary(
-                    id: result.nodeID,
-                    name: result.name,
-                    relativePath: result.relativePath,
-                    kind: displayName(for: result.kind),
-                    category: result.category,
-                    categoryName: displayName(for: result.category),
-                    sizeText: ByteCount.string(result.allocatedBytes)
-                )
-            }
+    var isSidebarInsightLoading: Bool {
+        sidebarDerivedState.isLoading && sidebarDerivedState.mode == sidebarInsightMode
+    }
+
+    var isSearchLoading: Bool {
+        searchState.isLoading
     }
 
     var selectedNodeDetail: SelectionDetail? {
@@ -252,6 +282,7 @@ final class AppModel: ObservableObject {
     func scan(_ url: URL) {
         scanTask?.cancel()
         scanCancellationSource?.cancel()
+        cancelDerivedDataTasks()
 
         let cancellationSource = ScanCancellationSource()
         scanCancellationSource = cancellationSource
@@ -344,6 +375,7 @@ final class AppModel: ObservableObject {
 
         scanTask?.cancel()
         scanCancellationSource?.cancel()
+        cancelDerivedDataTasks()
         scanTask = nil
         scanCancellationSource = nil
         isScanning = false
@@ -574,88 +606,109 @@ final class AppModel: ObservableObject {
         expandedTreemapNodeIDsStorage = []
     }
 
-    private func cachedSidebarInsights() -> SidebarInsightCache? {
-        guard let snapshot, let displayRoot else { return nil }
+    private func scheduleSidebarDerivedRefresh(force: Bool) {
+        activeDerivedTask?.cancel()
 
-        let key = SidebarInsightCacheKey(snapshot: snapshot, displayRootID: displayRoot.id)
-        if let sidebarInsightCache, sidebarInsightCache.key == key {
-            return sidebarInsightCache
+        guard let snapshot, let displayRoot else {
+            sidebarDerivedState = .empty(mode: sidebarInsightMode)
+            return
         }
 
-        let cache = SidebarInsightCache(
-            key: key,
-            largestDisplayRootChildren: buildLargestDisplayRootChildren(snapshot: snapshot, displayRoot: displayRoot),
-            largestDescendantFileSummaries: buildLargestDescendantFileSummaries(snapshot: snapshot, displayRoot: displayRoot),
-            categoryUsageSummaries: buildCategoryUsageSummaries(snapshot: snapshot, displayRoot: displayRoot)
-        )
-        sidebarInsightCache = cache
-        return cache
+        let mode = sidebarInsightMode
+        guard mode != .search else {
+            sidebarDerivedState = .empty(mode: mode)
+            return
+        }
+
+        let now = Date()
+        if isScanning && !force && now.timeIntervalSince(lastProgressiveDerivedRefresh) < 0.75 {
+            return
+        }
+        lastProgressiveDerivedRefresh = now
+
+        let key = SnapshotDerivedKey(snapshot: snapshot, displayRootID: displayRoot.id)
+        derivedGeneration += 1
+        let generation = derivedGeneration
+        sidebarDerivedState = .loading(mode: mode)
+
+        activeDerivedTask = Task { [snapshot, displayRoot, mode, key, generation] in
+            let state = await Task.detached(priority: .utility) {
+                SidebarDerivedBuilder.build(mode: mode, snapshot: snapshot, displayRoot: displayRoot)
+            }.value
+
+            guard !Task.isCancelled,
+                  generation == derivedGeneration,
+                  mode == sidebarInsightMode,
+                  currentSnapshotDerivedKey() == key else {
+                return
+            }
+
+            sidebarDerivedState = state
+            activeDerivedTask = nil
+        }
     }
 
-    private func buildLargestDisplayRootChildren(
-        snapshot: FileTreeSnapshot,
-        displayRoot: FileNode
-    ) -> [DisplayRootChildSummary] {
-        snapshot.children(of: displayRoot.id)
-            .filter { $0.allocatedSize > 0 }
-            .sorted { lhs, rhs in
-                if lhs.allocatedSize == rhs.allocatedSize {
-                    return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
-                }
-                return lhs.allocatedSize > rhs.allocatedSize
+    private func scheduleSearchRefresh(debounce: Bool) {
+        activeSearchTask?.cancel()
+
+        let query = searchQuery
+        guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              let snapshot,
+              let displayRoot else {
+            searchState = .empty(query: query)
+            return
+        }
+
+        let key = SnapshotDerivedKey(snapshot: snapshot, displayRootID: displayRoot.id)
+        let cachedIndex = searchIndexCache?.key == key ? searchIndexCache?.index : nil
+        searchGeneration += 1
+        let generation = searchGeneration
+        searchState = .loading(query: query)
+
+        activeSearchTask = Task { [snapshot, query, key, cachedIndex, generation] in
+            if debounce {
+                try? await Task.sleep(nanoseconds: 230_000_000)
             }
-            .prefix(8)
-            .map { node in
-                DisplayRootChildSummary(
-                    id: node.id,
-                    name: displayName(for: node),
-                    kind: displayName(for: node.kind),
-                    sizeText: ByteCount.string(node.allocatedSize),
-                    path: node.url?.path,
-                    isContainer: isNavigableContainer(node)
+            guard !Task.isCancelled else { return }
+
+            let output = await Task.detached(priority: .utility) {
+                SearchDerivedBuilder.build(
+                    snapshot: snapshot,
+                    key: key,
+                    query: query,
+                    cachedIndex: cachedIndex
                 )
+            }.value
+
+            guard !Task.isCancelled,
+                  generation == searchGeneration,
+                  query == searchQuery,
+                  currentSnapshotDerivedKey() == key else {
+                return
             }
+
+            searchIndexCache = SearchIndexCache(key: key, index: output.index)
+            searchState = .ready(query: query, results: output.results)
+            activeSearchTask = nil
+        }
     }
 
-    private func buildLargestDescendantFileSummaries(
-        snapshot: FileTreeSnapshot,
-        displayRoot: FileNode
-    ) -> [DescendantFileSummary] {
-        snapshot.largestDescendantFiles(rootedAt: displayRoot.id, limit: 16)
-            .compactMap { usage in
-                guard let node = snapshot[usage.nodeID] else { return nil }
-                let category = FileCategoryClassifier.category(for: node)
-                return DescendantFileSummary(
-                    id: node.id,
-                    name: displayName(for: node),
-                    relativePath: snapshot.relativePath(from: displayRoot.id, to: node.id) ?? displayName(for: node),
-                    category: category,
-                    categoryName: displayName(for: category),
-                    sizeText: ByteCount.string(usage.allocatedBytes),
-                    shareText: percentageString(usage.shareOfRoot),
-                    shareOfCurrentRoot: usage.shareOfRoot,
-                    path: node.url?.path
-                )
-            }
+    private func cancelDerivedDataTasks() {
+        activeDerivedTask?.cancel()
+        activeSearchTask?.cancel()
+        activeDerivedTask = nil
+        activeSearchTask = nil
+        derivedGeneration += 1
+        searchGeneration += 1
+        searchIndexCache = nil
+        sidebarDerivedState = .empty(mode: sidebarInsightMode)
+        searchState = .empty(query: searchQuery)
+        lastProgressiveDerivedRefresh = Date.distantPast
     }
 
-    private func buildCategoryUsageSummaries(
-        snapshot: FileTreeSnapshot,
-        displayRoot: FileNode
-    ) -> [CategoryUsageSummary] {
-        snapshot.categoryUsage(rootedAt: displayRoot.id)
-            .map { usage in
-                CategoryUsageSummary(
-                    category: usage.category,
-                    name: displayName(for: usage.category),
-                    sizeText: ByteCount.string(usage.allocatedBytes),
-                    itemCountText: "\(usage.itemCount)",
-                    shareText: percentageString(usage.shareOfRoot),
-                    allocatedBytes: usage.allocatedBytes,
-                    itemCount: usage.itemCount,
-                    shareOfCurrentRoot: usage.shareOfRoot
-                )
-            }
+    private func currentSnapshotDerivedKey() -> SnapshotDerivedKey? {
+        guard let snapshot, let displayRoot else { return nil }
+        return SnapshotDerivedKey(snapshot: snapshot, displayRootID: displayRoot.id)
     }
 
     private func expansionPathNodeIDs(for id: NodeID) -> Set<NodeID> {
@@ -879,7 +932,7 @@ final class AppModel: ObservableObject {
     }
 }
 
-private struct SidebarInsightCacheKey: Hashable {
+private struct SnapshotDerivedKey: Hashable, Sendable {
     var snapshotRootID: NodeID
     var displayRootID: NodeID
     var nodeCount: Int
@@ -903,11 +956,259 @@ private struct SidebarInsightCacheKey: Hashable {
     }
 }
 
-private struct SidebarInsightCache {
-    var key: SidebarInsightCacheKey
+private struct SearchIndexCache {
+    var key: SnapshotDerivedKey
+    var index: FileSearchIndex
+}
+
+private struct SearchBuildOutput: Sendable {
+    var index: FileSearchIndex
+    var results: [SearchResultSummary]
+}
+
+private enum SidebarDerivedBuilder {
+    static func build(
+        mode: SidebarInsightMode,
+        snapshot: FileTreeSnapshot,
+        displayRoot: FileNode
+    ) -> SidebarDerivedState {
+        switch mode {
+        case .here:
+            return SidebarDerivedState(
+                mode: mode,
+                isLoading: false,
+                largestDisplayRootChildren: buildLargestDisplayRootChildren(snapshot: snapshot, displayRoot: displayRoot)
+            )
+        case .files:
+            return SidebarDerivedState(
+                mode: mode,
+                isLoading: false,
+                largestDescendantFileSummaries: buildLargestDescendantFileSummaries(snapshot: snapshot, displayRoot: displayRoot)
+            )
+        case .types:
+            return SidebarDerivedState(
+                mode: mode,
+                isLoading: false,
+                categoryUsageSummaries: buildCategoryUsageSummaries(snapshot: snapshot, displayRoot: displayRoot)
+            )
+        case .search:
+            return .empty(mode: mode)
+        }
+    }
+
+    private static func buildLargestDisplayRootChildren(
+        snapshot: FileTreeSnapshot,
+        displayRoot: FileNode
+    ) -> [DisplayRootChildSummary] {
+        snapshot.children(of: displayRoot.id)
+            .filter { $0.allocatedSize > 0 }
+            .sorted { lhs, rhs in
+                if lhs.allocatedSize == rhs.allocatedSize {
+                    return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
+                }
+                return lhs.allocatedSize > rhs.allocatedSize
+            }
+            .prefix(8)
+            .map { node in
+                DisplayRootChildSummary(
+                    id: node.id,
+                    name: DerivedFormatting.displayName(for: node),
+                    kind: DerivedFormatting.displayName(for: node.kind),
+                    sizeText: ByteCount.string(node.allocatedSize),
+                    path: node.url?.path,
+                    isContainer: isNavigableContainer(node)
+                )
+            }
+    }
+
+    private static func buildLargestDescendantFileSummaries(
+        snapshot: FileTreeSnapshot,
+        displayRoot: FileNode
+    ) -> [DescendantFileSummary] {
+        snapshot.largestDescendantFiles(rootedAt: displayRoot.id, limit: 16)
+            .compactMap { usage in
+                guard let node = snapshot[usage.nodeID] else { return nil }
+                let category = FileCategoryClassifier.category(for: node)
+                return DescendantFileSummary(
+                    id: node.id,
+                    name: DerivedFormatting.displayName(for: node),
+                    relativePath: snapshot.relativePath(from: displayRoot.id, to: node.id) ?? DerivedFormatting.displayName(for: node),
+                    category: category,
+                    categoryName: DerivedFormatting.displayName(for: category),
+                    sizeText: ByteCount.string(usage.allocatedBytes),
+                    shareText: DerivedFormatting.percentageString(usage.shareOfRoot),
+                    shareOfCurrentRoot: usage.shareOfRoot,
+                    path: node.url?.path
+                )
+            }
+    }
+
+    private static func buildCategoryUsageSummaries(
+        snapshot: FileTreeSnapshot,
+        displayRoot: FileNode
+    ) -> [CategoryUsageSummary] {
+        snapshot.categoryUsage(rootedAt: displayRoot.id)
+            .map { usage in
+                CategoryUsageSummary(
+                    category: usage.category,
+                    name: DerivedFormatting.displayName(for: usage.category),
+                    sizeText: ByteCount.string(usage.allocatedBytes),
+                    itemCountText: "\(usage.itemCount)",
+                    shareText: DerivedFormatting.percentageString(usage.shareOfRoot),
+                    allocatedBytes: usage.allocatedBytes,
+                    itemCount: usage.itemCount,
+                    shareOfCurrentRoot: usage.shareOfRoot
+                )
+            }
+    }
+
+    private static func isNavigableContainer(_ node: FileNode) -> Bool {
+        guard !node.children.isEmpty else { return false }
+        return node.kind == .directory || node.kind == .package
+    }
+}
+
+private enum SearchDerivedBuilder {
+    static func build(
+        snapshot: FileTreeSnapshot,
+        key: SnapshotDerivedKey,
+        query: String,
+        cachedIndex: FileSearchIndex?
+    ) -> SearchBuildOutput {
+        let index = cachedIndex ?? FileSearchIndex(
+            snapshot: snapshot,
+            rootedAt: key.displayRootID,
+            isCancelled: { Task.isCancelled }
+        )
+        let results = index.search(
+            query: query,
+            limit: 30,
+            isCancelled: { Task.isCancelled }
+        )
+            .map { result in
+                SearchResultSummary(
+                    id: result.nodeID,
+                    name: result.name,
+                    relativePath: result.relativePath,
+                    kind: DerivedFormatting.displayName(for: result.kind),
+                    category: result.category,
+                    categoryName: DerivedFormatting.displayName(for: result.category),
+                    sizeText: ByteCount.string(result.allocatedBytes)
+                )
+            }
+        return SearchBuildOutput(index: index, results: results)
+    }
+}
+
+private enum DerivedFormatting {
+    static func displayName(for node: FileNode) -> String {
+        if !node.name.isEmpty { return node.name }
+        return node.url?.lastPathComponent.isEmpty == false ? node.url?.lastPathComponent ?? node.name : node.url?.path ?? node.name
+    }
+
+    static func displayName(for kind: NodeKind) -> String {
+        switch kind {
+        case .directory:
+            return "Folder"
+        case .file:
+            return "File"
+        case .package:
+            return "Package"
+        case .symlink:
+            return "Alias"
+        case .other:
+            return "Other"
+        }
+    }
+
+    static func displayName(for category: FileCategory) -> String {
+        switch category {
+        case .video:
+            return "Video"
+        case .image:
+            return "Image"
+        case .audio:
+            return "Audio"
+        case .archive:
+            return "Archive"
+        case .appPackage:
+            return "App"
+        case .document:
+            return "Document"
+        case .source:
+            return "Source"
+        case .cache:
+            return "Cache"
+        case .system:
+            return "System"
+        case .other:
+            return "Other"
+        }
+    }
+
+    static func percentageString(_ share: Double) -> String {
+        guard share > 0 else { return "0%" }
+
+        let percent = share * 100
+        if percent < 0.1 {
+            return "<0.1%"
+        }
+        if percent >= 99.95 {
+            return "100%"
+        }
+        if percent >= 10 || percent.rounded() == percent {
+            return String(format: "%.0f%%", percent)
+        }
+        return String(format: "%.1f%%", percent)
+    }
+}
+
+struct SidebarDerivedState: Hashable, Sendable {
+    var mode: SidebarInsightMode
+    var isLoading: Bool
     var largestDisplayRootChildren: [DisplayRootChildSummary]
     var largestDescendantFileSummaries: [DescendantFileSummary]
     var categoryUsageSummaries: [CategoryUsageSummary]
+
+    init(
+        mode: SidebarInsightMode,
+        isLoading: Bool,
+        largestDisplayRootChildren: [DisplayRootChildSummary] = [],
+        largestDescendantFileSummaries: [DescendantFileSummary] = [],
+        categoryUsageSummaries: [CategoryUsageSummary] = []
+    ) {
+        self.mode = mode
+        self.isLoading = isLoading
+        self.largestDisplayRootChildren = largestDisplayRootChildren
+        self.largestDescendantFileSummaries = largestDescendantFileSummaries
+        self.categoryUsageSummaries = categoryUsageSummaries
+    }
+
+    static func empty(mode: SidebarInsightMode) -> SidebarDerivedState {
+        SidebarDerivedState(mode: mode, isLoading: false)
+    }
+
+    static func loading(mode: SidebarInsightMode) -> SidebarDerivedState {
+        SidebarDerivedState(mode: mode, isLoading: true)
+    }
+}
+
+struct SearchState: Hashable, Sendable {
+    var query: String
+    var isLoading: Bool
+    var results: [SearchResultSummary]
+
+    static func empty(query: String) -> SearchState {
+        SearchState(query: query, isLoading: false, results: [])
+    }
+
+    static func loading(query: String) -> SearchState {
+        SearchState(query: query, isLoading: true, results: [])
+    }
+
+    static func ready(query: String, results: [SearchResultSummary]) -> SearchState {
+        SearchState(query: query, isLoading: false, results: results)
+    }
 }
 
 struct ScanOverview: Hashable {
@@ -977,7 +1278,7 @@ struct ScanProgress: Hashable, Sendable {
     }
 }
 
-enum SidebarInsightMode: String, CaseIterable, Hashable, Identifiable {
+enum SidebarInsightMode: String, CaseIterable, Hashable, Identifiable, Sendable {
     case here
     case files
     case types
@@ -1023,7 +1324,7 @@ struct OtherSmallFilesDetail: Hashable {
     var displayRootName: String?
 }
 
-struct DisplayRootChildSummary: Identifiable, Hashable {
+struct DisplayRootChildSummary: Identifiable, Hashable, Sendable {
     var id: NodeID
     var name: String
     var kind: String
@@ -1032,7 +1333,7 @@ struct DisplayRootChildSummary: Identifiable, Hashable {
     var isContainer: Bool
 }
 
-struct DescendantFileSummary: Identifiable, Hashable {
+struct DescendantFileSummary: Identifiable, Hashable, Sendable {
     var id: NodeID
     var name: String
     var relativePath: String
@@ -1044,7 +1345,7 @@ struct DescendantFileSummary: Identifiable, Hashable {
     var path: String?
 }
 
-struct CategoryUsageSummary: Identifiable, Hashable {
+struct CategoryUsageSummary: Identifiable, Hashable, Sendable {
     var category: FileCategory
     var name: String
     var sizeText: String
@@ -1057,7 +1358,7 @@ struct CategoryUsageSummary: Identifiable, Hashable {
     var id: FileCategory { category }
 }
 
-struct SearchResultSummary: Identifiable, Hashable {
+struct SearchResultSummary: Identifiable, Hashable, Sendable {
     var id: NodeID
     var name: String
     var relativePath: String

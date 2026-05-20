@@ -94,7 +94,6 @@ struct StatusPill: View {
             if isScanning {
                 ProgressView()
                     .controlSize(.mini)
-                    .scaleEffect(0.7)
             }
 
             Text(text)
@@ -103,9 +102,7 @@ struct StatusPill: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
         }
-        .padding(.horizontal, 9)
-        .padding(.vertical, 4)
-        .frame(maxWidth: 240)
+        .frame(maxWidth: 260, alignment: .trailing)
     }
 }
 

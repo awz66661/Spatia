@@ -10,6 +10,10 @@ private struct BenchmarkRow: Encodable {
     var durationMilliseconds: Double
     var eventCount: Int
     var firstSnapshotMilliseconds: Double?
+    var searchIndexMilliseconds: Double
+    var searchQueryMilliseconds: Double
+    var categoryUsageMilliseconds: Double
+    var largestFilesMilliseconds: Double
     var issueCount: Int
 }
 
@@ -38,6 +42,7 @@ struct SpatiaBenchmarks {
             try fixture.build(root)
 
             let run = try scanFixture(root: root, options: fixture.options)
+            let derived = measureDerivedMetrics(snapshot: run.result.snapshot)
             let row = BenchmarkRow(
                 fixture: fixture.name,
                 fileCount: run.result.summary.fileCount,
@@ -47,6 +52,10 @@ struct SpatiaBenchmarks {
                 durationMilliseconds: run.result.summary.duration * 1_000,
                 eventCount: run.eventCount,
                 firstSnapshotMilliseconds: run.firstSnapshotMilliseconds,
+                searchIndexMilliseconds: derived.searchIndexMilliseconds,
+                searchQueryMilliseconds: derived.searchQueryMilliseconds,
+                categoryUsageMilliseconds: derived.categoryUsageMilliseconds,
+                largestFilesMilliseconds: derived.largestFilesMilliseconds,
                 issueCount: run.result.issues.count
             )
 
@@ -62,6 +71,13 @@ struct SpatiaBenchmarks {
 private enum BenchmarkError: Error {
     case invalidUTF8
     case missingResult
+}
+
+private struct DerivedMetricTimings {
+    var searchIndexMilliseconds: Double
+    var searchQueryMilliseconds: Double
+    var categoryUsageMilliseconds: Double
+    var largestFilesMilliseconds: Double
 }
 
 private let fixtures: [BenchmarkFixture] = [
@@ -108,6 +124,35 @@ private func scanFixture(root: URL, options: ScanOptions) throws -> (
         throw BenchmarkError.missingResult
     }
     return (result, eventCount, firstSnapshotMilliseconds)
+}
+
+private func measureDerivedMetrics(snapshot: FileTreeSnapshot) -> DerivedMetricTimings {
+    let rootID = snapshot.rootID
+    let searchIndex = measure {
+        FileSearchIndex(snapshot: snapshot, rootedAt: rootID)
+    }
+    let searchQuery = measure {
+        searchIndex.value.search(query: "a", limit: 30)
+    }
+    let categoryUsage = measure {
+        snapshot.categoryUsage(rootedAt: rootID)
+    }
+    let largestFiles = measure {
+        snapshot.largestDescendantFiles(rootedAt: rootID, limit: 16)
+    }
+
+    return DerivedMetricTimings(
+        searchIndexMilliseconds: searchIndex.milliseconds,
+        searchQueryMilliseconds: searchQuery.milliseconds,
+        categoryUsageMilliseconds: categoryUsage.milliseconds,
+        largestFilesMilliseconds: largestFiles.milliseconds
+    )
+}
+
+private func measure<T>(_ work: () -> T) -> (value: T, milliseconds: Double) {
+    let startedAt = Date()
+    let value = work()
+    return (value, Date().timeIntervalSince(startedAt) * 1_000)
 }
 
 private func buildBalancedTree(
