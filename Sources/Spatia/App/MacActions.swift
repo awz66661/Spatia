@@ -3,20 +3,24 @@ import Foundation
 import QuickLookUI
 
 enum MacActions {
+    @MainActor
     static func reveal(_ url: URL) {
         NSWorkspace.shared.activateFileViewerSelecting([url])
     }
 
+    @MainActor
     static func copyPath(_ url: URL) {
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         pasteboard.setString(url.path, forType: .string)
     }
 
+    @MainActor
     static func quickLook(_ url: URL) -> QuickLookResult {
         QuickLookCoordinator.shared.preview(url)
     }
 
+    @MainActor
     static func confirmMoveToTrash(_ confirmation: TrashConfirmation) -> Bool {
         let alert = NSAlert()
         alert.alertStyle = .warning
@@ -83,7 +87,8 @@ enum QuickLookResult: Equatable {
     case unavailable
 }
 
-private final class QuickLookCoordinator: NSObject, QLPreviewPanelDataSource, QLPreviewPanelDelegate {
+@MainActor
+private final class QuickLookCoordinator: NSObject, @preconcurrency QLPreviewPanelDataSource, QLPreviewPanelDelegate {
     static let shared = QuickLookCoordinator()
 
     private var previewURL: URL?

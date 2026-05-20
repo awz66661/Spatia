@@ -17,17 +17,16 @@ private struct BenchmarkRow: Encodable {
     var issueCount: Int
 }
 
-private struct BenchmarkFixture {
+private struct BenchmarkFixture: Sendable {
     var name: String
     var options: ScanOptions
-    var build: (URL) throws -> Void
+    var build: @Sendable (URL) throws -> Void
 }
-
-private let fileManager = FileManager.default
 
 @main
 struct SpatiaBenchmarks {
     static func main() throws {
+        let fileManager = FileManager.default
         let workspace = fileManager.temporaryDirectory
             .appendingPathComponent("SpatiaBenchmarks-\(UUID().uuidString)", isDirectory: true)
         try fileManager.createDirectory(at: workspace, withIntermediateDirectories: true)
@@ -184,7 +183,7 @@ private func populateDirectory(
 
     for index in 0..<fanout {
         let child = directory.appendingPathComponent("dir-\(level)-\(index)", isDirectory: true)
-        try fileManager.createDirectory(at: child, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: child, withIntermediateDirectories: true)
         try populateDirectory(
             child,
             level: level + 1,
@@ -207,7 +206,7 @@ private func buildPackageSet(root: URL, packageCount: Int, filesPerPackage: Int,
         let contents = root
             .appendingPathComponent("Fixture-\(packageIndex).app", isDirectory: true)
             .appendingPathComponent("Contents", isDirectory: true)
-        try fileManager.createDirectory(at: contents, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: contents, withIntermediateDirectories: true)
 
         for fileIndex in 0..<filesPerPackage {
             try writeFile(
@@ -219,6 +218,6 @@ private func buildPackageSet(root: URL, packageCount: Int, filesPerPackage: Int,
 }
 
 private func writeFile(at url: URL, bytes: Int) throws {
-    try fileManager.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
     try Data(repeating: 0x5A, count: bytes).write(to: url, options: .atomic)
 }

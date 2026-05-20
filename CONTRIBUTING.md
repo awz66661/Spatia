@@ -16,7 +16,7 @@ Requirements:
 
 Command Line Tools alone may be enough for package-level builds, but native app development, XCTest, and release builds should use a full Xcode install.
 
-`Package.swift` uses PackageDescription 6.2 so the package can declare `.macOS(.v26)`. The package currently keeps Swift language mode at v5 to avoid mixing the macOS 26 shell refresh with an unrelated Swift 6 concurrency migration.
+`Package.swift` uses PackageDescription 6.2 so the package can declare `.macOS(.v26)` and build with the Swift 6 language mode.
 
 ```sh
 ./Scripts/check-env.sh

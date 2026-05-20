@@ -57,11 +57,11 @@ final class AppModel: ObservableObject {
     @Published private var syntheticOtherSelection: SyntheticOtherSelection?
     @Published private var expandedTreemapNodeIDsStorage: Set<NodeID> = []
 
-    var confirmMoveToTrash: (TrashConfirmation) -> Bool = MacActions.confirmMoveToTrash
+    var confirmMoveToTrash: @MainActor (TrashConfirmation) -> Bool = MacActions.confirmMoveToTrash
     var moveToTrash: (URL) async -> TrashActionResult = MacActions.moveToTrash
-    var quickLookFile: (URL) -> QuickLookResult = MacActions.quickLook
-    var revealInFinder: (URL) -> Void = MacActions.reveal
-    var copyPathToPasteboard: (URL) -> Void = MacActions.copyPath
+    var quickLookFile: @MainActor (URL) -> QuickLookResult = MacActions.quickLook
+    var revealInFinder: @MainActor (URL) -> Void = MacActions.reveal
+    var copyPathToPasteboard: @MainActor (URL) -> Void = MacActions.copyPath
     var scanEvents: @Sendable (URL, ScanOptions, @escaping (ScanEvent) -> Void) -> Void = { url, options, receive in
         FileScanner(options: options).scanEvents(root: url, receive: receive)
     }

@@ -37,6 +37,5 @@ let package = Package(
             dependencies: ["Spatia", "SpatiaCore"],
             path: "Tests/SpatiaTests"
         )
-    ],
-    swiftLanguageModes: [.v5]
+    ]
 )
