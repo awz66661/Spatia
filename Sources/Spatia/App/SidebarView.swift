@@ -6,88 +6,120 @@ struct SidebarView: View {
     @State private var isAccessExpanded = false
 
     var body: some View {
-        ZStack {
-            Rectangle()
-                .fill(.thinMaterial)
-                .ignoresSafeArea(.container, edges: [.top, .bottom, .leading])
-
-            List {
-                Section("Current Scan") {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                SidebarGroup("Current Scan") {
                     SidebarSourceSummaryView(
                         overview: model.scanOverview,
                         currentScanURL: model.currentScanURL,
                         isScanning: model.isScanning,
                         statusText: model.statusText
                     )
-                    .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 10, trailing: 14))
                 }
 
-                Section("Quick Scan") {
-                    SourceActionRow(title: "Downloads", systemImage: "arrow.down.circle") {
-                        model.scanDownloads()
-                    }
-                    SourceActionRow(title: "Desktop", systemImage: "desktopcomputer") {
-                        model.scanDesktop()
-                    }
-                    SourceActionRow(title: "Documents", systemImage: "doc.text") {
-                        model.scanDocuments()
-                    }
-                    SourceActionRow(title: "Applications", systemImage: "app.dashed") {
-                        model.scanApplications()
-                    }
-                    SourceActionRow(title: "Home", systemImage: "house") {
-                        model.scanHome()
-                    }
-                    SourceActionRow(title: "Choose Folder...", systemImage: "folder.badge.plus") {
-                        model.chooseFolder()
+                SidebarGroup("Quick Scan") {
+                    VStack(alignment: .leading, spacing: 4) {
+                        SourceActionRow(title: "Downloads", systemImage: "arrow.down.circle") {
+                            model.scanDownloads()
+                        }
+                        SourceActionRow(title: "Desktop", systemImage: "desktopcomputer") {
+                            model.scanDesktop()
+                        }
+                        SourceActionRow(title: "Documents", systemImage: "doc.text") {
+                            model.scanDocuments()
+                        }
+                        SourceActionRow(title: "Applications", systemImage: "app.dashed") {
+                            model.scanApplications()
+                        }
+                        SourceActionRow(title: "Home", systemImage: "house") {
+                            model.scanHome()
+                        }
+                        SourceActionRow(title: "Choose Folder...", systemImage: "folder.badge.plus") {
+                            model.chooseFolder()
+                        }
                     }
                 }
 
-                Section("Scan Options") {
-                    Toggle(isOn: Binding(
-                        get: { model.scanPreferences.includeHiddenFiles },
-                        set: { model.setIncludeHiddenFiles($0) }
-                    )) {
-                        Label("Hidden Files", systemImage: "eye")
-                    }
+                SidebarGroup("Scan Options") {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Toggle(isOn: Binding(
+                            get: { model.scanPreferences.includeHiddenFiles },
+                            set: { model.setIncludeHiddenFiles($0) }
+                        )) {
+                            Label("Hidden Files", systemImage: "eye")
+                        }
 
-                    Toggle(isOn: Binding(
-                        get: { model.scanPreferences.expandPackages },
-                        set: { model.setExpandPackages($0) }
-                    )) {
-                        Label("Expand Packages", systemImage: "shippingbox")
-                    }
+                        Toggle(isOn: Binding(
+                            get: { model.scanPreferences.expandPackages },
+                            set: { model.setExpandPackages($0) }
+                        )) {
+                            Label("Expand Packages", systemImage: "shippingbox")
+                        }
 
-                    Picker("Depth Limit", selection: Binding(
-                        get: { model.scanPreferences.maxDepth },
-                        set: { model.setMaxDepth($0) }
-                    )) {
-                        Text("No Limit").tag(Optional<Int>.none)
-                        Text("1 Level").tag(Optional(1))
-                        Text("2 Levels").tag(Optional(2))
-                        Text("3 Levels").tag(Optional(3))
-                        Text("5 Levels").tag(Optional(5))
-                    }
-                    .pickerStyle(.menu)
+                        HStack(spacing: 8) {
+                            Label("Depth Limit", systemImage: "square.stack.3d.down.right")
+                                .lineLimit(1)
+                            Spacer(minLength: 0)
+                            Picker("Depth Limit", selection: Binding(
+                                get: { model.scanPreferences.maxDepth },
+                                set: { model.setMaxDepth($0) }
+                            )) {
+                                Text("No Limit").tag(Optional<Int>.none)
+                                Text("1 Level").tag(Optional(1))
+                                Text("2 Levels").tag(Optional(2))
+                                Text("3 Levels").tag(Optional(3))
+                                Text("5 Levels").tag(Optional(5))
+                            }
+                            .labelsHidden()
+                            .pickerStyle(.menu)
+                            .frame(width: 112)
+                        }
 
-                    Text("Options apply to the next scan.")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+                        Text("Options apply to the next scan.")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .font(.callout)
                 }
 
-                PermissionSummaryView(
-                    issues: model.permissionIssues,
-                    isExpanded: $isAccessExpanded
-                )
+                SidebarGroup("Access") {
+                    PermissionSummaryView(
+                        issues: model.permissionIssues,
+                        isExpanded: $isAccessExpanded
+                    )
+                }
             }
-            .listStyle(.sidebar)
-            .scrollContentBackground(.hidden)
-            .background(Color.clear)
-            .safeAreaInset(edge: .top, spacing: 0) {
-                Color.clear
-                    .frame(height: DesignTokens.sidebarTitlebarInset)
-            }
+            .padding(.horizontal, 18)
+            .padding(.bottom, 18)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .scrollContentBackground(.hidden)
+        .background(Color.clear)
+        .safeAreaPadding(.top, DesignTokens.sidebarTitlebarInset)
+        .safeAreaPadding(.leading, 4)
+    }
+}
+
+private struct SidebarGroup<Content: View>: View {
+    var title: String
+    @ViewBuilder var content: Content
+
+    init(_ title: String, @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.content = content()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.caption)
+                .fontWeight(.semibold)
+                .foregroundStyle(.secondary)
+                .textCase(.uppercase)
+
+            content
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 }
@@ -179,9 +211,12 @@ private struct SourceActionRow: View {
     var body: some View {
         Button(action: action) {
             Label(title, systemImage: systemImage)
+                .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .font(.callout)
     }
 }
 
@@ -209,38 +244,36 @@ private struct PermissionSummaryView: View {
     @Binding var isExpanded: Bool
 
     var body: some View {
-        Section("Access") {
-            if issues.isEmpty {
-                Label("No skipped locations", systemImage: "checkmark.circle")
+        if issues.isEmpty {
+            Label("No skipped locations", systemImage: "checkmark.circle")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+        } else {
+            DisclosureGroup(isExpanded: $isExpanded) {
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(Array(issues.enumerated()), id: \.offset) { _, issue in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(issue.url.path)
+                                .font(.caption)
+                                .textSelection(.enabled)
+                                .lineLimit(3)
+                            Text(issue.kind == .permissionDenied ? "Full Disk Access may be required." : issue.message)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(2)
+                        }
+                    }
+
+                    Text("Some locations were skipped.")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.top, 6)
+            } label: {
+                Label("\(issues.count) unreadable location\(issues.count == 1 ? "" : "s")", systemImage: "lock")
                     .font(.callout)
                     .foregroundStyle(.secondary)
-            } else {
-                DisclosureGroup(isExpanded: $isExpanded) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        ForEach(Array(issues.enumerated()), id: \.offset) { _, issue in
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(issue.url.path)
-                                    .font(.caption)
-                                    .textSelection(.enabled)
-                                    .lineLimit(3)
-                                Text(issue.kind == .permissionDenied ? "Full Disk Access may be required." : issue.message)
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(2)
-                            }
-                        }
-
-                        Text("Some locations were skipped.")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    .padding(.top, 6)
-                } label: {
-                    Label("\(issues.count) unreadable location\(issues.count == 1 ? "" : "s")", systemImage: "lock")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                }
             }
         }
     }

@@ -77,12 +77,13 @@ struct MainWindowView: View {
                     Label("Inspector", systemImage: "sidebar.trailing")
                 }
                 .labelStyle(.iconOnly)
+                .disabled(model.snapshot == nil)
                 .help(model.isRightInspectorVisible ? "Hide Inspector" : "Show Inspector")
             }
         }
         .inspector(
             isPresented: Binding(
-                get: { model.isRightInspectorVisible },
+                get: { model.isRightInspectorVisible && model.snapshot != nil },
                 set: { model.isRightInspectorVisible = $0 }
             )
         ) {
