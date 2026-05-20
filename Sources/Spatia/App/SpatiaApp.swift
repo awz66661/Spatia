@@ -8,7 +8,7 @@ struct SpatiaApp: App {
         Window("Spatia", id: "main") {
             MainWindowView()
                 .environmentObject(model)
-                .frame(minWidth: 1080, minHeight: 700)
+                .frame(minWidth: 1200, minHeight: 700)
         }
         .windowStyle(.hiddenTitleBar)
         .commands {

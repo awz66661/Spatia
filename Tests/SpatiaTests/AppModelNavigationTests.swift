@@ -163,6 +163,31 @@ final class AppModelNavigationTests: XCTestCase {
         XCTAssertEqual(model.currentViewSummary?.folderCount, "2")
     }
 
+    func testRightInspectorIsVisibleByDefaultAndBuildsInsights() async {
+        let model = AppModel()
+        XCTAssertTrue(model.isRightInspectorVisible)
+        model.result = ScanResult(
+            snapshot: sidebarSnapshot(),
+            summary: ScanSummary(
+                rootURL: URL(fileURLWithPath: "/tmp/root", isDirectory: true),
+                fileCount: 2,
+                folderCount: 3,
+                logicalBytes: 100,
+                allocatedBytes: 100,
+                duration: 1
+            ),
+            issues: []
+        )
+        model.displayRootID = 0
+
+        await waitForCanvasDerivedState(model) {
+            model.insightLargestFileItems.count == 3 && !model.insightCategoryUsageItems.isEmpty
+        }
+
+        XCTAssertEqual(model.insightLargestFileItems.map(\.id), [5, 4, 3])
+        XCTAssertFalse(model.insightCategoryUsageItems.isEmpty)
+    }
+
     func testLargestDescendantFileSummariesAreScopedAndSortedByAllocatedSize() async {
         let model = AppModel()
         model.result = ScanResult(
@@ -178,7 +203,7 @@ final class AppModelNavigationTests: XCTestCase {
             issues: []
         )
         model.displayRootID = 0
-        model.isInsightsPanelVisible = true
+        model.isRightInspectorVisible = true
 
         await waitForCanvasDerivedState(model) {
             model.insightLargestFileItems.count == 3
@@ -217,7 +242,7 @@ final class AppModelNavigationTests: XCTestCase {
             issues: []
         )
         model.displayRootID = 0
-        model.isInsightsPanelVisible = true
+        model.isRightInspectorVisible = true
 
         await waitForCanvasDerivedState(model) {
             !model.insightCategoryUsageItems.isEmpty
@@ -257,7 +282,7 @@ final class AppModelNavigationTests: XCTestCase {
             issues: []
         )
         model.displayRootID = 0
-        model.isInsightsPanelVisible = true
+        model.isRightInspectorVisible = true
 
         await waitForCanvasDerivedState(model) {
             model.insightLargestFileItems.first?.id == 5
@@ -324,7 +349,37 @@ final class AppModelNavigationTests: XCTestCase {
         XCTAssertEqual(model.expandedTreemapNodeIDs, [2])
     }
 
-    func testSearchResultsAreScopedToDisplayRootAndOpenBySelectingNode() async {
+    func testSearchResultsDefaultToScanScopeAndOpenAcrossCurrentView() async {
+        let model = AppModel()
+        model.result = ScanResult(
+            snapshot: sidebarSnapshot(),
+            summary: ScanSummary(
+                rootURL: URL(fileURLWithPath: "/tmp/root", isDirectory: true),
+                fileCount: 2,
+                folderCount: 3,
+                logicalBytes: 100,
+                allocatedBytes: 100,
+                duration: 1
+            ),
+            issues: []
+        )
+        model.displayRootID = 1
+        model.searchQuery = "large"
+
+        await waitForSearchResults(model, query: "large") {
+            model.searchResultSummaries.map(\.id) == [2, 5]
+        }
+
+        XCTAssertEqual(model.searchResultSummaries.map(\.id), [2, 5])
+
+        model.openSearchResult(5)
+
+        XCTAssertEqual(model.displayRootID, 0)
+        XCTAssertEqual(model.selectedID, 5)
+        XCTAssertEqual(model.expandedTreemapNodeIDs, [2])
+    }
+
+    func testSearchCanBeScopedToCurrentView() async {
         let model = AppModel()
         model.result = ScanResult(
             snapshot: sidebarSnapshot(),
@@ -339,6 +394,7 @@ final class AppModelNavigationTests: XCTestCase {
             issues: []
         )
         model.displayRootID = 0
+        model.searchScope = .currentView
         model.searchQuery = "large"
 
         await waitForSearchResults(model, query: "large") {
@@ -346,11 +402,6 @@ final class AppModelNavigationTests: XCTestCase {
         }
 
         XCTAssertEqual(model.searchResultSummaries.map(\.id), [2, 5])
-
-        model.openInsightItem(5)
-
-        XCTAssertEqual(model.selectedID, 5)
-        XCTAssertEqual(model.expandedTreemapNodeIDs, [2])
 
         model.displayRootID = 1
 
@@ -395,14 +446,17 @@ final class AppModelNavigationTests: XCTestCase {
         let model = AppModel()
 
         model.searchQuery = "large"
+        model.isRightInspectorVisible = false
         model.focusSearch()
 
         XCTAssertTrue(model.isSearchPresented)
+        XCTAssertTrue(model.isRightInspectorVisible)
         XCTAssertEqual(model.searchQuery, "large")
 
         model.clearSearch()
 
-        XCTAssertFalse(model.isSearchPresented)
+        XCTAssertTrue(model.isSearchPresented)
+        XCTAssertTrue(model.isRightInspectorVisible)
         XCTAssertEqual(model.searchQuery, "")
         XCTAssertTrue(model.searchResultSummaries.isEmpty)
     }
@@ -438,8 +492,9 @@ final class AppModelNavigationTests: XCTestCase {
         model.cancelScan()
     }
 
-    func testCanvasDerivedStateOnlyComputesInsightsWhenDrawerIsVisible() async {
+    func testCanvasDerivedStateOnlyComputesInsightsWhenInspectorIsVisible() async {
         let model = AppModel()
+        model.isRightInspectorVisible = false
         model.result = ScanResult(
             snapshot: sidebarSnapshot(),
             summary: ScanSummary(
@@ -458,12 +513,12 @@ final class AppModelNavigationTests: XCTestCase {
             model.currentViewItems.count == 3
         }
 
-        XCTAssertFalse(model.isInsightsPanelVisible)
+        XCTAssertFalse(model.isRightInspectorVisible)
         XCTAssertEqual(model.currentViewItems.map(\.id), [2, 1, 3])
         XCTAssertTrue(model.insightLargestFileItems.isEmpty)
         XCTAssertTrue(model.insightCategoryUsageItems.isEmpty)
 
-        model.isInsightsPanelVisible = true
+        model.isRightInspectorVisible = true
         await waitForCanvasDerivedState(model) {
             model.insightLargestFileItems.count == 3 && !model.insightCategoryUsageItems.isEmpty
         }
@@ -471,7 +526,7 @@ final class AppModelNavigationTests: XCTestCase {
         XCTAssertEqual(model.insightLargestFileItems.map(\.id), [5, 4, 3])
         XCTAssertFalse(model.insightCategoryUsageItems.isEmpty)
 
-        model.isInsightsPanelVisible = false
+        model.isRightInspectorVisible = false
         await waitForCanvasDerivedState(model) {
             model.insightLargestFileItems.isEmpty && model.currentViewItems.count == 3
         }

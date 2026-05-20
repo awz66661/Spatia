@@ -23,13 +23,19 @@ final class AppModel: ObservableObject {
     @Published var statusText = "Choose a folder to scan."
     @Published var currentScanURL: URL?
     @Published var scanPreferences = ScanPreferences()
-    @Published var isInsightsPanelVisible = false {
+    @Published var isRightInspectorVisible = true {
         didSet {
-            guard oldValue != isInsightsPanelVisible else { return }
+            guard oldValue != isRightInspectorVisible else { return }
             scheduleCanvasDerivedRefresh(force: true)
         }
     }
     @Published var isSearchPresented = false
+    @Published var searchScope: SearchScope = .scan {
+        didSet {
+            guard oldValue != searchScope else { return }
+            scheduleSearchRefresh(debounce: false)
+        }
+    }
 
     @Published var searchQuery = "" {
         didSet {
@@ -464,13 +470,27 @@ final class AppModel: ObservableObject {
         select(id)
     }
 
+    func openSearchResult(_ id: NodeID) {
+        guard id != syntheticOtherNodeID,
+              let snapshot,
+              snapshot[id] != nil else {
+            return
+        }
+
+        let currentRootID = displayRoot?.id
+        if currentRootID == nil || !isNode(id, inSubtreeRootedAt: currentRootID) {
+            displayRootID = snapshot.rootID
+        }
+        select(id)
+    }
+
     func focusSearch() {
         isSearchPresented = true
+        isRightInspectorVisible = true
     }
 
     func clearSearch() {
         searchQuery = ""
-        isSearchPresented = false
     }
 
     func hoverTreemapNode(_ id: NodeID?) {
@@ -664,13 +684,28 @@ final class AppModel: ObservableObject {
 
         let query = searchQuery
         guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-              let snapshot,
-              let displayRoot else {
+              let snapshot else {
             searchState = .empty(query: query)
             return
         }
 
-        let key = SnapshotDerivedKey(snapshot: snapshot, displayRootID: displayRoot.id)
+        let searchRootID: NodeID
+        switch searchScope {
+        case .scan:
+            searchRootID = snapshot.rootID
+        case .currentView:
+            guard let displayRoot else {
+                searchState = .empty(query: query)
+                return
+            }
+            searchRootID = displayRoot.id
+        }
+
+        let key = SnapshotDerivedKey(
+            snapshot: snapshot,
+            displayRootID: searchRootID,
+            searchRootID: searchRootID
+        )
         let cachedIndex = searchIndexCache?.key == key ? searchIndexCache?.index : nil
         searchGeneration += 1
         let generation = searchGeneration
@@ -694,7 +729,7 @@ final class AppModel: ObservableObject {
             guard !Task.isCancelled,
                   generation == searchGeneration,
                   query == searchQuery,
-                  currentSnapshotDerivedKey() == key else {
+                  currentSearchDerivedKey() == key else {
                 return
             }
 
@@ -719,7 +754,7 @@ final class AppModel: ObservableObject {
 
     private func canvasScopesToBuild() -> Set<CanvasDerivedScope> {
         var scopes: Set<CanvasDerivedScope> = [.currentView]
-        if isInsightsPanelVisible {
+        if isRightInspectorVisible {
             scopes.insert(.largestFiles)
             scopes.insert(.typeUsage)
         }
@@ -729,6 +764,30 @@ final class AppModel: ObservableObject {
     private func currentSnapshotDerivedKey() -> SnapshotDerivedKey? {
         guard let snapshot, let displayRoot else { return nil }
         return SnapshotDerivedKey(snapshot: snapshot, displayRootID: displayRoot.id)
+    }
+
+    private func currentSearchDerivedKey() -> SnapshotDerivedKey? {
+        guard let snapshot else { return nil }
+        switch searchScope {
+        case .scan:
+            return SnapshotDerivedKey(
+                snapshot: snapshot,
+                displayRootID: snapshot.rootID,
+                searchRootID: snapshot.rootID
+            )
+        case .currentView:
+            guard let displayRoot else { return nil }
+            return SnapshotDerivedKey(
+                snapshot: snapshot,
+                displayRootID: displayRoot.id,
+                searchRootID: displayRoot.id
+            )
+        }
+    }
+
+    private func isNode(_ id: NodeID, inSubtreeRootedAt rootID: NodeID?) -> Bool {
+        guard let rootID, let snapshot else { return false }
+        return snapshot.breadcrumb(for: id).contains { $0.id == rootID }
     }
 
     private func expansionPathNodeIDs(for id: NodeID) -> Set<NodeID> {
@@ -955,6 +1014,7 @@ final class AppModel: ObservableObject {
 private struct SnapshotDerivedKey: Hashable, Sendable {
     var snapshotRootID: NodeID
     var displayRootID: NodeID
+    var searchRootID: NodeID
     var nodeCount: Int
     var nodeStorageAddress: UInt
     var rootLogicalSize: Int64
@@ -962,9 +1022,10 @@ private struct SnapshotDerivedKey: Hashable, Sendable {
     var displayRootLogicalSize: Int64
     var displayRootAllocatedSize: Int64
 
-    init(snapshot: FileTreeSnapshot, displayRootID: NodeID) {
+    init(snapshot: FileTreeSnapshot, displayRootID: NodeID, searchRootID: NodeID? = nil) {
         self.snapshotRootID = snapshot.rootID
         self.displayRootID = displayRootID
+        self.searchRootID = searchRootID ?? displayRootID
         self.nodeCount = snapshot.nodes.count
         self.nodeStorageAddress = snapshot.nodes.withUnsafeBufferPointer { buffer in
             buffer.baseAddress.map { UInt(bitPattern: $0) } ?? 0
@@ -1098,7 +1159,7 @@ private enum SearchDerivedBuilder {
     ) -> SearchBuildOutput {
         let index = cachedIndex ?? FileSearchIndex(
             snapshot: snapshot,
-            rootedAt: key.displayRootID,
+            rootedAt: key.searchRootID,
             isCancelled: { Task.isCancelled }
         )
         let results = index.search(
@@ -1304,6 +1365,22 @@ enum CanvasDerivedScope: String, CaseIterable, Hashable, Identifiable, Sendable 
     case typeUsage
 
     var id: Self { self }
+}
+
+enum SearchScope: String, CaseIterable, Hashable, Identifiable, Sendable {
+    case scan
+    case currentView
+
+    var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .scan:
+            return "Scan"
+        case .currentView:
+            return "Current View"
+        }
+    }
 }
 
 struct ScanPreferences: Hashable {

@@ -11,8 +11,9 @@ enum DesignTokens {
     static let inspectorCornerRadius: CGFloat = 18
     static let sidebarTitlebarInset: CGFloat = 58
     static let currentViewStripHeight: CGFloat = 58
-    static let searchOverlayWidth: CGFloat = 430
-    static let insightsDrawerWidth: CGFloat = 330
+    static let rightInspectorMinWidth: CGFloat = 300
+    static let rightInspectorIdealWidth: CGFloat = 340
+    static let rightInspectorMaxWidth: CGFloat = 430
 
     static var windowBackground: Color {
         Color(nsColor: .textBackgroundColor)
@@ -43,7 +44,7 @@ struct MainWindowView: View {
         .containerBackground(DesignTokens.windowBackground, for: .window)
         .toolbar {
             ToolbarItem(placement: .navigation) {
-                ScanSourceMenu()
+                ScanFolderButton()
             }
 
             ToolbarItem(placement: .primaryAction) {
@@ -71,18 +72,26 @@ struct MainWindowView: View {
 
             ToolbarItem(placement: .primaryAction) {
                 Button {
-                    model.isInsightsPanelVisible.toggle()
+                    model.isRightInspectorVisible.toggle()
                 } label: {
-                    Label("Insights", systemImage: model.isInsightsPanelVisible ? "chart.pie.fill" : "chart.pie")
+                    Label("Inspector", systemImage: "sidebar.trailing")
                 }
                 .labelStyle(.iconOnly)
-                .disabled(model.snapshot == nil)
-                .help(model.isInsightsPanelVisible ? "Hide Insights" : "Show Insights")
+                .help(model.isRightInspectorVisible ? "Hide Inspector" : "Show Inspector")
             }
-
-            ToolbarItem(placement: .primaryAction) {
-                StatusPill(text: model.statusText, isScanning: model.isScanning)
-            }
+        }
+        .inspector(
+            isPresented: Binding(
+                get: { model.isRightInspectorVisible },
+                set: { model.isRightInspectorVisible = $0 }
+            )
+        ) {
+            RightInspectorView()
+                .inspectorColumnWidth(
+                    min: DesignTokens.rightInspectorMinWidth,
+                    ideal: DesignTokens.rightInspectorIdealWidth,
+                    max: DesignTokens.rightInspectorMaxWidth
+                )
         }
         .searchable(
             text: Binding(
@@ -154,38 +163,8 @@ private struct TreemapDetailView: View {
                         )
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .padding(DesignTokens.treemapInset)
-
-                        if !model.searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                            SearchResultsOverlay()
-                                .padding(.leading, 18)
-                                .padding(.top, 12)
-                        }
-
-                        if model.isInsightsPanelVisible {
-                            HStack {
-                                Spacer(minLength: 0)
-                                InsightsDrawerView()
-                                    .padding(.trailing, 18)
-                                    .padding(.top, 12)
-                            }
-                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                            .transition(.move(edge: .trailing).combined(with: .opacity))
-                        }
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .safeAreaInset(edge: .bottom, spacing: 0) {
-                        if let detail = model.selectedNodeDetail {
-                            SelectionDetailPanel(detail: detail)
-                                .padding(.horizontal, 18)
-                                .padding(.top, 8)
-                                .padding(.bottom, 16)
-                        } else if let detail = model.selectedOtherDetail {
-                            OtherSmallFilesDetailPanel(detail: detail)
-                                .padding(.horizontal, 18)
-                                .padding(.top, 8)
-                                .padding(.bottom, 16)
-                        }
-                    }
                 }
             } else {
                 ContentUnavailableView(
