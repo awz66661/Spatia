@@ -31,7 +31,7 @@ public enum FileCategoryClassifier {
         typeIdentifier: String?,
         flags: NodeFlags = []
     ) -> FileCategory {
-        let url = path.map { URL(fileURLWithPath: $0, isDirectory: kind == .directory || kind == .package || kind == .volume) }
+        let url = path.map { URL(fileURLWithPath: $0, isDirectory: kind == .directory || kind == .package) }
         let pathRiskPolicy = PathRiskPolicy()
 
         if pathRiskPolicy.isSystemCategory(url: url, flags: flags) {

@@ -348,7 +348,7 @@ final class TreemapNSView: NSView {
         case .system:
             .systemGray
         case .other:
-            tile.kind == .directory || tile.kind == .volume ? .systemCyan : .systemMint
+            tile.kind == .directory ? .systemCyan : .systemMint
         }
 
         let alpha = max(0.18, 0.42 - CGFloat(tile.depth) * 0.055)

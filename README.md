@@ -14,6 +14,10 @@ Spatia is a native macOS disk space visualizer built around a SpaceSniffer-style
 
 It is a file space map, not a Mac cleaner. Scans are user initiated, results stay local, and the app does not run telemetry, background indexing, automatic cleanup, or permanent deletion.
 
+<p align="center">
+  <img src="Docs/Screenshots/spatia-dark.png" alt="Spatia showing a disk usage treemap in dark mode">
+</p>
+
 ## Features
 
 - Scan Downloads, Desktop, Documents, Applications, Home, or a chosen folder.
@@ -23,6 +27,14 @@ It is a file space map, not a Mac cleaner. Scans are user initiated, results sta
 - Quick Look files, reveal items in Finder, and copy paths.
 - Move selected items to Trash after safety checks and confirmation.
 - Summarize unreadable locations without interrupting the scan.
+
+## Screenshots
+
+Spatia follows the system appearance and works in light mode as well.
+
+<p align="center">
+  <img src="Docs/Screenshots/spatia-light.png" alt="Spatia showing a disk usage treemap in light mode">
+</p>
 
 ## Status
 

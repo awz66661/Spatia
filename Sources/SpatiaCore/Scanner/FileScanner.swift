@@ -74,15 +74,32 @@ public enum ScanIssueKind: String, Hashable, Sendable {
     case unreadable
 }
 
+typealias ResourceValuesProvider = @Sendable (URL, Set<URLResourceKey>) throws -> URLResourceValues
+
 public struct FileScanner: Sendable {
     public var options: ScanOptions
+    private let resourceValuesProvider: ResourceValuesProvider
 
     public init(options: ScanOptions = ScanOptions()) {
         self.options = options
+        self.resourceValuesProvider = { url, keys in
+            try url.resourceValues(forKeys: keys)
+        }
+    }
+
+    init(
+        options: ScanOptions = ScanOptions(),
+        resourceValuesProvider: @escaping ResourceValuesProvider
+    ) {
+        self.options = options
+        self.resourceValuesProvider = resourceValuesProvider
     }
 
     public func scan(root: URL) -> ScanResult {
-        var builder = FileTreeBuilder(options: options)
+        var builder = FileTreeBuilder(
+            options: options,
+            resourceValuesProvider: resourceValuesProvider
+        )
         return builder.scan(root: root.standardizedFileURL)
     }
 }
@@ -93,8 +110,14 @@ private struct FileTreeBuilder {
         var issue: ScanIssue?
     }
 
+    private struct ResourceRead {
+        var values: URLResourceValues?
+        var issue: ScanIssue?
+    }
+
     private let options: ScanOptions
     private let fileManager = FileManager.default
+    private let resourceValuesProvider: ResourceValuesProvider
     private var nodes: [FileNode] = []
     private var issues: [ScanIssue] = []
     private var fileCount = 0
@@ -121,8 +144,12 @@ private struct FileTreeBuilder {
 
     private let pathRiskPolicy = PathRiskPolicy()
 
-    init(options: ScanOptions) {
+    init(
+        options: ScanOptions,
+        resourceValuesProvider: @escaping ResourceValuesProvider
+    ) {
         self.options = options
+        self.resourceValuesProvider = resourceValuesProvider
     }
 
     mutating func scan(root: URL) -> ScanResult {
@@ -148,11 +175,15 @@ private struct FileTreeBuilder {
     }
 
     private mutating func scanNode(at url: URL, parentID: NodeID?, depth: Int) -> NodeID {
-        let values = resourceValues(for: url)
+        let resourceRead = resourceValues(for: url)
+        let values = resourceRead.values
         let kind = nodeKind(for: values)
         let id = NodeID(nodes.count)
         let name = url.lastPathComponent.isEmpty ? url.path : url.lastPathComponent
         var flags = nodeFlags(for: values)
+        if resourceRead.issue?.kind == .permissionDenied {
+            flags.insert(.permissionDenied)
+        }
 
         if pathRiskPolicy.isScannerProtected(url: url, flags: flags) {
             flags.insert(.systemProtected)
@@ -166,7 +197,7 @@ private struct FileTreeBuilder {
                 url: url,
                 kind: kind,
                 flags: flags,
-                typeIdentifier: typeIdentifier(for: url),
+                typeIdentifier: typeIdentifier(for: url, values: values),
                 logicalSize: fileLogicalSize(values),
                 allocatedSize: fileAllocatedSize(values),
                 modifiedAt: values?.contentModificationDate,
@@ -180,8 +211,13 @@ private struct FileTreeBuilder {
             return id
         }
 
+        if let issue = resourceRead.issue {
+            markMetadataReadFailure(nodeID: id, issue: issue)
+            return id
+        }
+
         switch kind {
-        case .directory, .volume:
+        case .directory:
             folderCount += 1
             scanDirectoryNode(id: id, url: url, depth: depth)
         case .package:
@@ -215,8 +251,8 @@ private struct FileTreeBuilder {
         }
 
         let contents = contentsOfDirectory(at: url)
-        if contents.issue != nil {
-            markDirectoryReadFailure(nodeID: id)
+        if let issue = contents.issue {
+            markDirectoryReadFailure(nodeID: id, issue: issue)
             return
         }
 
@@ -258,11 +294,12 @@ private struct FileTreeBuilder {
         for childURL in contents.urls {
             guard !isCancelled else { return (logical, allocated) }
 
-            let values = resourceValues(for: childURL)
+            let resourceRead = resourceValues(for: childURL)
+            guard let values = resourceRead.values else { continue }
             let kind = nodeKind(for: values)
 
             switch kind {
-            case .directory, .package, .volume:
+            case .directory, .package:
                 folderCount += 1
                 let measured = measureOpaqueDirectory(at: childURL, depth: depth + 1)
                 logical += measured.logical
@@ -300,27 +337,54 @@ private struct FileTreeBuilder {
             )
             return DirectoryContents(urls: urls, issue: nil)
         } catch {
-            let nsError = error as NSError
-            let kind: ScanIssueKind = nsError.domain == NSCocoaErrorDomain && nsError.code == NSFileReadNoPermissionError
-                ? .permissionDenied
-                : .unreadable
-            let issue = ScanIssue(url: url, kind: kind, message: error.localizedDescription)
+            let issue = scanIssue(url: url, error: error)
             issues.append(issue)
             return DirectoryContents(urls: [], issue: issue)
         }
     }
 
-    private mutating func markDirectoryReadFailure(nodeID: NodeID) {
-        nodes[Int(nodeID)].flags.insert(.permissionDenied)
+    private mutating func markDirectoryReadFailure(nodeID: NodeID, issue: ScanIssue) {
+        if issue.kind == .permissionDenied {
+            nodes[Int(nodeID)].flags.insert(.permissionDenied)
+        }
         nodes[Int(nodeID)].children = []
         nodes[Int(nodeID)].scanState = .failed
     }
 
-    private func resourceValues(for url: URL) -> URLResourceValues? {
-        try? url.resourceValues(forKeys: resourceKeys)
+    private mutating func markMetadataReadFailure(nodeID: NodeID, issue: ScanIssue) {
+        if issue.kind == .permissionDenied {
+            nodes[Int(nodeID)].flags.insert(.permissionDenied)
+        }
+        nodes[Int(nodeID)].children = []
+        nodes[Int(nodeID)].scanState = .failed
     }
 
-    private func typeIdentifier(for url: URL) -> String? {
+    private mutating func resourceValues(for url: URL) -> ResourceRead {
+        do {
+            return ResourceRead(
+                values: try resourceValuesProvider(url, resourceKeys),
+                issue: nil
+            )
+        } catch {
+            let issue = scanIssue(url: url, error: error)
+            issues.append(issue)
+            return ResourceRead(values: nil, issue: issue)
+        }
+    }
+
+    private func scanIssue(url: URL, error: Error) -> ScanIssue {
+        let nsError = error as NSError
+        let kind: ScanIssueKind = nsError.domain == NSCocoaErrorDomain && nsError.code == NSFileReadNoPermissionError
+            ? .permissionDenied
+            : .unreadable
+        return ScanIssue(url: url, kind: kind, message: error.localizedDescription)
+    }
+
+    private func typeIdentifier(for url: URL, values: URLResourceValues?) -> String? {
+        if let typeIdentifier = values?.typeIdentifier {
+            return typeIdentifier
+        }
+
         if let typeIdentifier = try? url.resourceValues(forKeys: [.typeIdentifierKey]).typeIdentifier {
             return typeIdentifier
         }

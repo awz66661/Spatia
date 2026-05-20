@@ -57,7 +57,7 @@ public struct PathRiskPolicy: Sendable {
             return PathRisk(classification: .userCache)
         }
 
-        if kind == .volume || isVolumeRoot(path) {
+        if isVolumeRoot(path) {
             return PathRisk(classification: .volumeRoot)
         }
 

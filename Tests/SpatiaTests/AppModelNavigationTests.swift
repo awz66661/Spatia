@@ -200,6 +200,35 @@ final class AppModelNavigationTests: XCTestCase {
         XCTAssertEqual(model.selectedID, 3)
     }
 
+    func testQuickLookUnavailableUpdatesStatusWithoutOpeningFile() {
+        let model = AppModel()
+        model.result = ScanResult(
+            snapshot: sidebarSnapshot(),
+            summary: ScanSummary(
+                rootURL: URL(fileURLWithPath: "/tmp/root", isDirectory: true),
+                fileCount: 2,
+                folderCount: 3,
+                logicalBytes: 100,
+                allocatedBytes: 100,
+                duration: 1
+            ),
+            issues: []
+        )
+        model.displayRootID = 0
+        model.selectedID = 3
+
+        var previewedURL: URL?
+        model.quickLookFile = {
+            previewedURL = $0
+            return .unavailable
+        }
+
+        model.quickLookSelected()
+
+        XCTAssertEqual(previewedURL?.path, "/tmp/root/small.txt")
+        XCTAssertEqual(model.statusText, "Quick Look is unavailable for small.txt.")
+    }
+
     func testExpandedTreemapNodeIDsAreEmptyWithoutSelection() {
         let model = AppModel()
         model.result = ScanResult(

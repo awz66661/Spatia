@@ -11,39 +11,21 @@ public struct RecursiveTreemapBuildOptions: Hashable, Sendable {
     public var reservedHeaderHeight: CGFloat
     public var maximumTileCount: Int?
 
-    public var maxDepth: Int {
-        get { maximumTraversalDepth }
-        set { maximumTraversalDepth = newValue }
-    }
-
-    public var minimumParentArea: CGFloat {
-        get { minimumExpandableTileArea }
-        set { minimumExpandableTileArea = newValue }
-    }
-
-    public var minimumChildSide: CGFloat {
-        get { minimumUsefulChildSide }
-        set { minimumUsefulChildSide = newValue }
-    }
-
     public init(
-        maxDepth: Int? = nil,
         maximumTraversalDepth: Int = 12,
         childInset: CGFloat = 8,
-        minimumParentArea: CGFloat? = nil,
         minimumExpandableTileArea: CGFloat = 10_000,
         minimumChildContentArea: CGFloat = 7_500,
-        minimumChildSide: CGFloat? = nil,
         minimumUsefulChildSide: CGFloat = 28,
         minimumUsefulChildArea: CGFloat = 900,
         reservedHeaderHeight: CGFloat = 22,
         maximumTileCount: Int? = nil
     ) {
-        self.maximumTraversalDepth = maxDepth ?? maximumTraversalDepth
+        self.maximumTraversalDepth = maximumTraversalDepth
         self.childInset = childInset
-        self.minimumExpandableTileArea = minimumParentArea ?? minimumExpandableTileArea
+        self.minimumExpandableTileArea = minimumExpandableTileArea
         self.minimumChildContentArea = minimumChildContentArea
-        self.minimumUsefulChildSide = minimumChildSide ?? minimumUsefulChildSide
+        self.minimumUsefulChildSide = minimumUsefulChildSide
         self.minimumUsefulChildArea = minimumUsefulChildArea
         self.reservedHeaderHeight = reservedHeaderHeight
         self.maximumTileCount = maximumTileCount
@@ -178,7 +160,7 @@ public struct RecursiveTreemapBuilder: Sendable {
 
     private func shouldRenderChildren(for tile: Tile) -> Bool {
         guard tile.nodeID != syntheticOtherNodeID else { return false }
-        guard tile.kind == .directory || tile.kind == .package || tile.kind == .volume else { return false }
+        guard tile.kind == .directory || tile.kind == .package else { return false }
         return tile.rect.width * tile.rect.height >= options.minimumExpandableTileArea
     }
 
@@ -218,7 +200,7 @@ public struct RecursiveTreemapBuilder: Sendable {
     private func insetForChildren(_ tile: Tile, depth: Int) -> CGRect {
         let inset = max(3, options.childInset - CGFloat(depth * 2))
         let insetRect = tile.rect.insetBy(dx: inset, dy: inset)
-        let headerHeight = min(tile.reservedHeaderHeight, max(0, insetRect.height - options.minimumChildSide))
+        let headerHeight = min(tile.reservedHeaderHeight, max(0, insetRect.height - options.minimumUsefulChildSide))
         return CGRect(
             x: insetRect.minX,
             y: insetRect.minY + headerHeight,

@@ -58,7 +58,7 @@ public struct FileTreeSnapshot: Sendable {
         var summary = removedIDs.reduce(into: RemovedSubtreeSummary()) { partial, removedID in
             guard let removedNode = self[removedID] else { return }
             switch removedNode.kind {
-            case .directory, .package, .volume:
+            case .directory, .package:
                 partial.folderCount += 1
             case .file, .symlink, .other:
                 partial.fileCount += 1

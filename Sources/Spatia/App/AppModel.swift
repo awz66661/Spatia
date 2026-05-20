@@ -14,6 +14,7 @@ final class AppModel: ObservableObject {
 
     var confirmMoveToTrash: (TrashConfirmation) -> Bool = MacActions.confirmMoveToTrash
     var moveToTrash: (URL) async -> TrashActionResult = MacActions.moveToTrash
+    var quickLookFile: (URL) -> QuickLookResult = MacActions.quickLook
 
     private var scanTask: Task<Void, Never>?
     private var scanCancellationSource: ScanCancellationSource?
@@ -216,7 +217,7 @@ final class AppModel: ObservableObject {
 
     func enterDirectory(_ id: NodeID) {
         guard id != syntheticOtherNodeID, let node = snapshot?[id], !node.children.isEmpty else { return }
-        guard node.kind == .directory || node.kind == .package || node.kind == .volume else { return }
+        guard node.kind == .directory || node.kind == .package else { return }
         displayRootID = node.id
         selectedID = nil
         expandedTreemapNodeIDsStorage = []
@@ -238,7 +239,12 @@ final class AppModel: ObservableObject {
 
     func quickLook(_ id: NodeID) {
         guard id != syntheticOtherNodeID, let node = snapshot?[id], node.kind == .file, let url = node.url else { return }
-        MacActions.quickLook(url)
+        switch quickLookFile(url) {
+        case .shown:
+            break
+        case .unavailable:
+            statusText = "Quick Look is unavailable for \(displayName(for: node))."
+        }
     }
 
     func moveSelectedItemToTrash() async {
@@ -388,7 +394,7 @@ final class AppModel: ObservableObject {
 
     private func isNavigableContainer(_ node: FileNode) -> Bool {
         guard !node.children.isEmpty else { return false }
-        return node.kind == .directory || node.kind == .package || node.kind == .volume
+        return node.kind == .directory || node.kind == .package
     }
 
     private func displayName(for node: FileNode) -> String {
@@ -411,8 +417,6 @@ final class AppModel: ObservableObject {
             return "Package"
         case .symlink:
             return "Alias"
-        case .volume:
-            return "Volume"
         case .other:
             return "Other"
         }

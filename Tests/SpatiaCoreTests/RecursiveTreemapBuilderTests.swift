@@ -13,7 +13,11 @@ final class RecursiveTreemapBuilderTests: XCTestCase {
                 readableWeightExponent: 0.88,
                 orientationPolicy: .spaceSniffer
             ),
-            options: RecursiveTreemapBuildOptions(maxDepth: 3, childInset: 4, minimumParentArea: 100)
+            options: RecursiveTreemapBuildOptions(
+                maximumTraversalDepth: 3,
+                childInset: 4,
+                minimumExpandableTileArea: 100
+            )
         )
 
         let tiles = builder.build(
@@ -40,9 +44,9 @@ final class RecursiveTreemapBuilderTests: XCTestCase {
                 orientationPolicy: .spaceSniffer
             ),
             options: RecursiveTreemapBuildOptions(
-                maxDepth: 3,
+                maximumTraversalDepth: 3,
                 childInset: 4,
-                minimumParentArea: 100,
+                minimumExpandableTileArea: 100,
                 reservedHeaderHeight: 24
             )
         )
@@ -75,7 +79,7 @@ final class RecursiveTreemapBuilderTests: XCTestCase {
                 readableWeightExponent: 0.88,
                 orientationPolicy: .spaceSniffer
             ),
-            options: RecursiveTreemapBuildOptions(maxDepth: 1, childInset: 4)
+            options: RecursiveTreemapBuildOptions(maximumTraversalDepth: 1, childInset: 4)
         )
 
         let tiles = builder.build(snapshot: snapshot, rootID: 0, in: CGRect(x: 0, y: 0, width: 240, height: 160))

@@ -1,6 +1,6 @@
 import Darwin
 import Foundation
-import SpatiaCore
+@testable import SpatiaCore
 import XCTest
 
 final class FileScannerTests: XCTestCase {
@@ -47,6 +47,34 @@ final class FileScannerTests: XCTestCase {
         let image = try XCTUnwrap(fixture.child(named: "photo.png", in: root, snapshot: result.snapshot))
 
         XCTAssertNotNil(image.typeIdentifier)
+    }
+
+    func testResourceValueFailureProducesUnreadableIssueAndFailedNode() throws {
+        let fixture = try ScannerFixture()
+        defer { try? fixture.tearDown() }
+
+        let unreadable = try fixture.file("metadata-fails.dat", bytes: 8).standardizedFileURL
+        let scanner = FileScanner(resourceValuesProvider: { url, keys in
+            if url.standardizedFileURL == unreadable {
+                throw NSError(
+                    domain: NSCocoaErrorDomain,
+                    code: 12_345,
+                    userInfo: [NSLocalizedDescriptionKey: "metadata unavailable"]
+                )
+            }
+            return try url.resourceValues(forKeys: keys)
+        })
+
+        let result = scanner.scan(root: fixture.rootURL)
+        let root = try XCTUnwrap(result.snapshot.root)
+        let failedNode = try XCTUnwrap(fixture.child(named: "metadata-fails.dat", in: root, snapshot: result.snapshot))
+
+        XCTAssertEqual(result.summary.fileCount, 0)
+        XCTAssertEqual(result.summary.logicalBytes, 0)
+        XCTAssertTrue(result.issues.contains { $0.url.standardizedFileURL == unreadable && $0.kind == .unreadable })
+        XCTAssertEqual(failedNode.scanState, .failed)
+        XCTAssertEqual(failedNode.logicalSize, 0)
+        XCTAssertEqual(failedNode.allocatedSize, 0)
     }
 
     func testMaxDepthSkipsDescendantsBeyondLimit() throws {

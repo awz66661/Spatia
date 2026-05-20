@@ -13,7 +13,7 @@ enum MacActions {
         pasteboard.setString(url.path, forType: .string)
     }
 
-    static func quickLook(_ url: URL) {
+    static func quickLook(_ url: URL) -> QuickLookResult {
         QuickLookCoordinator.shared.preview(url)
     }
 
@@ -78,23 +78,28 @@ enum TrashActionResult: Equatable {
     case failed(String)
 }
 
+enum QuickLookResult: Equatable {
+    case shown
+    case unavailable
+}
+
 private final class QuickLookCoordinator: NSObject, QLPreviewPanelDataSource, QLPreviewPanelDelegate {
     static let shared = QuickLookCoordinator()
 
     private var previewURL: URL?
 
-    func preview(_ url: URL) {
+    func preview(_ url: URL) -> QuickLookResult {
         previewURL = url
 
         guard let panel = QLPreviewPanel.shared() else {
-            NSWorkspace.shared.open(url)
-            return
+            return .unavailable
         }
 
         panel.dataSource = self
         panel.delegate = self
         panel.reloadData()
         panel.makeKeyAndOrderFront(nil)
+        return .shown
     }
 
     func numberOfPreviewItems(in panel: QLPreviewPanel!) -> Int {

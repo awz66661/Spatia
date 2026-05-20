@@ -53,7 +53,6 @@ public enum NodeKind: String, Hashable, Sendable {
     case file
     case package
     case symlink
-    case volume
     case other
 }
 
@@ -73,7 +72,6 @@ public struct NodeFlags: OptionSet, Hashable, Sendable {
 }
 
 public enum ScanState: String, Hashable, Sendable {
-    case pending
     case scanning
     case complete
     case skipped
