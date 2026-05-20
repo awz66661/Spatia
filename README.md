@@ -24,6 +24,7 @@ It is a file space map, not a Mac cleaner. Scans are user initiated, results sta
 - Visualize disk usage with a recursive rectangular treemap.
 - Navigate into large folders with breadcrumbs.
 - Use sidebar insights to compare direct children, largest descendant files, and category usage in the current view.
+- Search the current view by name, path, kind, or category.
 - Inspect disk usage, logical size, kind, category, modified date, and path.
 - Quick Look files, reveal items in Finder, and copy paths.
 - Move selected items to Trash after safety checks and confirmation.

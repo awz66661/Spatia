@@ -12,6 +12,7 @@ final class AppModel: ObservableObject {
     @Published var currentScanURL: URL?
     @Published var scanPreferences = ScanPreferences()
     @Published var sidebarInsightMode: SidebarInsightMode = .here
+    @Published var searchQuery = ""
     @Published private var partialScanSnapshot: FileTreeSnapshot?
     @Published private var partialScanIssues: [ScanIssue] = []
     @Published private var scanProgress: ScanProgress?
@@ -158,6 +159,23 @@ final class AppModel: ObservableObject {
                     allocatedBytes: usage.allocatedBytes,
                     itemCount: usage.itemCount,
                     shareOfCurrentRoot: usage.shareOfRoot
+                )
+            }
+    }
+
+    var searchResultSummaries: [SearchResultSummary] {
+        guard let snapshot, let displayRoot else { return [] }
+
+        return snapshot.search(query: searchQuery, rootedAt: displayRoot.id, limit: 30)
+            .map { result in
+                SearchResultSummary(
+                    id: result.nodeID,
+                    name: result.name,
+                    relativePath: result.relativePath,
+                    kind: displayName(for: result.kind),
+                    category: result.category,
+                    categoryName: displayName(for: result.category),
+                    sizeText: ByteCount.string(result.allocatedBytes)
                 )
             }
     }
@@ -781,6 +799,7 @@ enum SidebarInsightMode: String, CaseIterable, Hashable, Identifiable {
     case here
     case files
     case types
+    case search
 
     var id: Self { self }
 
@@ -792,6 +811,8 @@ enum SidebarInsightMode: String, CaseIterable, Hashable, Identifiable {
             return "Files"
         case .types:
             return "Types"
+        case .search:
+            return "Search"
         }
     }
 }
@@ -852,6 +873,16 @@ struct CategoryUsageSummary: Identifiable, Hashable {
     var shareOfCurrentRoot: Double
 
     var id: FileCategory { category }
+}
+
+struct SearchResultSummary: Identifiable, Hashable {
+    var id: NodeID
+    var name: String
+    var relativePath: String
+    var kind: String
+    var category: FileCategory
+    var categoryName: String
+    var sizeText: String
 }
 
 struct SelectionDetail: Identifiable, Hashable {

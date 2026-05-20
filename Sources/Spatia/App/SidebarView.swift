@@ -201,7 +201,41 @@ private struct SidebarInsightsView: View {
                     SidebarCategoryUsageRow(item: item)
                 }
             }
+        case .search:
+            SearchField(
+                text: Binding(
+                    get: { model.searchQuery },
+                    set: { model.searchQuery = $0 }
+                )
+            )
+            .listRowInsets(EdgeInsets(top: 6, leading: 14, bottom: 7, trailing: 14))
+
+            if model.searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                SidebarEmptyInsightView(text: "Search names, paths, kinds, or categories in the current view.")
+            } else if model.searchResultSummaries.isEmpty {
+                SidebarEmptyInsightView(text: "No matches in the current view.")
+            } else {
+                ForEach(model.searchResultSummaries) { item in
+                    SidebarSearchResultRow(
+                        item: item,
+                        isSelected: model.selectedID == item.id
+                    ) {
+                        model.openInsightItem(item.id)
+                    }
+                    .listRowBackground(model.selectedID == item.id ? DesignTokens.selectedRowBackground : Color.clear)
+                }
+            }
         }
+    }
+}
+
+private struct SearchField: View {
+    @Binding var text: String
+
+    var body: some View {
+        TextField("Search", text: $text)
+            .textFieldStyle(.roundedBorder)
+            .controlSize(.small)
     }
 }
 
@@ -363,6 +397,48 @@ private struct SidebarCategoryUsageRow: View {
         }
         .padding(.vertical, 3)
         .help("\(item.name): \(item.sizeText), \(item.shareText)")
+    }
+}
+
+private struct SidebarSearchResultRow: View {
+    var item: SearchResultSummary
+    var isSelected: Bool
+    var action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                CategorySwatch(category: item.category)
+                    .frame(width: DesignTokens.sidebarIconColumnWidth, alignment: .center)
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(item.name)
+                        .font(.callout)
+                        .fontWeight(isSelected ? .semibold : .regular)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+
+                    Text("\(item.relativePath) - \(item.kind) - \(item.categoryName)")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                Text(item.sizeText)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+                    .frame(width: 66, alignment: .trailing)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.78)
+            }
+            .padding(.vertical, 3)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(item.relativePath)
     }
 }
 

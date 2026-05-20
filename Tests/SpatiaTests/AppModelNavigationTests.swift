@@ -239,6 +239,35 @@ final class AppModelNavigationTests: XCTestCase {
         XCTAssertEqual(model.expandedTreemapNodeIDs, [2])
     }
 
+    func testSearchResultsAreScopedToDisplayRootAndOpenBySelectingNode() {
+        let model = AppModel()
+        model.result = ScanResult(
+            snapshot: sidebarSnapshot(),
+            summary: ScanSummary(
+                rootURL: URL(fileURLWithPath: "/tmp/root", isDirectory: true),
+                fileCount: 2,
+                folderCount: 3,
+                logicalBytes: 100,
+                allocatedBytes: 100,
+                duration: 1
+            ),
+            issues: []
+        )
+        model.displayRootID = 0
+        model.searchQuery = "large"
+
+        XCTAssertEqual(model.searchResultSummaries.map(\.id), [2, 5])
+
+        model.openInsightItem(5)
+
+        XCTAssertEqual(model.selectedID, 5)
+        XCTAssertEqual(model.expandedTreemapNodeIDs, [2])
+
+        model.displayRootID = 1
+
+        XCTAssertTrue(model.searchResultSummaries.isEmpty)
+    }
+
     func testSelectedNodeDetailIncludesUsageShares() {
         let model = AppModel()
         model.result = ScanResult(
