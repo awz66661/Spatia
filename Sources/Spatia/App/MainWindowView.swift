@@ -42,31 +42,41 @@ struct MainWindowView: View {
         }
         .navigationSplitViewStyle(.prominentDetail)
         .containerBackground(DesignTokens.windowBackground, for: .window)
+        .toolbar(removing: .sidebarToggle)
         .toolbar {
             ToolbarItem(placement: .navigation) {
-                ScanFolderButton()
-            }
-
-            ToolbarItem(placement: .primaryAction) {
-                Button {
-                    model.rescanCurrentSource()
-                } label: {
-                    Label("Rescan", systemImage: "arrow.clockwise")
-                }
-                .labelStyle(.iconOnly)
-                .disabled(model.currentScanURL == nil || model.isScanning)
-                .help("Rescan Current")
-            }
-
-            ToolbarItem(placement: .primaryAction) {
-                if model.isScanning {
+                ControlGroup {
                     Button {
-                        model.cancelScan()
+                        toggleSourceSidebar()
                     } label: {
-                        Label("Cancel Scan", systemImage: "xmark.circle")
+                        Label(
+                            isSourceSidebarVisible ? "Hide Source Sidebar" : "Show Source Sidebar",
+                            systemImage: "sidebar.leading"
+                        )
                     }
                     .labelStyle(.iconOnly)
-                    .help("Cancel Scan")
+                    .help(isSourceSidebarVisible ? "Hide Source Sidebar" : "Show Source Sidebar")
+
+                    ScanFolderButton()
+
+                    Button {
+                        model.rescanCurrentSource()
+                    } label: {
+                        Label("Rescan", systemImage: "arrow.clockwise")
+                    }
+                    .labelStyle(.iconOnly)
+                    .disabled(model.currentScanURL == nil || model.isScanning)
+                    .help("Rescan Current")
+
+                    if model.isScanning {
+                        Button {
+                            model.cancelScan()
+                        } label: {
+                            Label("Cancel Scan", systemImage: "xmark.circle")
+                        }
+                        .labelStyle(.iconOnly)
+                        .help("Cancel Scan")
+                    }
                 }
             }
         }
@@ -95,6 +105,14 @@ struct MainWindowView: View {
             placement: .toolbar,
             prompt: "Name, path, kind, or category"
         )
+    }
+
+    private var isSourceSidebarVisible: Bool {
+        columnVisibility != .detailOnly
+    }
+
+    private func toggleSourceSidebar() {
+        columnVisibility = isSourceSidebarVisible ? .detailOnly : .all
     }
 }
 
