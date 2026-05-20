@@ -77,20 +77,20 @@ Requirements:
 ./Scripts/test.sh
 ```
 
-Create local unsigned artifacts:
+Create local ad-hoc signed artifacts:
 
 ```sh
-SKIP_CODESIGN=1 ./Scripts/package-app.sh
-SKIP_CODESIGN=1 ./Scripts/package-dmg.sh
+./Scripts/package-app.sh
+./Scripts/package-dmg.sh
 ```
 
 Open `Package.swift` in Xcode for native UI work.
 
-Release builds are created from version tags. Pushes to `main` run CI and unsigned packaging smoke tests only; pushing a tag such as `v0.1.0` creates a draft prerelease with the unsigned DMG and checksum attached.
+Release builds are created from version tags. Pushes to `main` run CI and packaging smoke tests only; pushing a tag such as `v0.1.0` creates a draft prerelease with the ad-hoc signed DMG and checksum attached.
 
 ## Current Limitations
 
-- Early release artifacts are unsigned and not notarized.
+- Early release artifacts are ad-hoc signed and not notarized.
 - Protected folders may produce partial scan results until the user grants Full Disk Access.
 - Move to Trash is available only for the selected item after safety checks and confirmation.
 - Permanent deletion, bulk deletion, automatic cleanup, and cleanup recommendations are not implemented.

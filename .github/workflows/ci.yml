@@ -18,9 +18,9 @@ jobs:
         run: ./Scripts/build-debug.sh
       - name: Test
         run: ./Scripts/test.sh
-      - name: Unsigned package smoke
+      - name: Package smoke
         run: |
-          DMG_PATH="$(SKIP_CODESIGN=1 ./Scripts/package-dmg.sh | tail -n 1)"
+          DMG_PATH="$(./Scripts/package-dmg.sh | tail -n 1)"
           test -f "${DMG_PATH}"
           test -f "${DMG_PATH}.sha256"
 

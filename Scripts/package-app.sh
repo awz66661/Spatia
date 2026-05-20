@@ -37,13 +37,11 @@ cp "${BIN_DIR}/${APP_NAME}" "${MACOS_DIR}/${APP_NAME}"
 cp "${INFO_PLIST}" "${CONTENTS_DIR}/Info.plist"
 cp "${APP_ICON}" "${RESOURCES_DIR}/AppIcon.icns"
 
-if [[ "${SKIP_CODESIGN:-0}" == "1" ]]; then
-  echo "Skipping code signing because SKIP_CODESIGN=1" >&2
-elif command -v codesign >/dev/null 2>&1; then
+if command -v codesign >/dev/null 2>&1; then
   CODESIGN_IDENTITY="${CODESIGN_IDENTITY:--}"
   codesign --force --deep --sign "${CODESIGN_IDENTITY}" "${APP_DIR}"
 else
-  echo "codesign is unavailable; set SKIP_CODESIGN=1 for unsigned packaging." >&2
+  echo "codesign is required to package the app." >&2
   exit 1
 fi
 

@@ -29,7 +29,7 @@ Open `Package.swift` in Xcode when working on the native UI. The package minimum
 For a local app-bundle smoke test:
 
 ```sh
-SKIP_CODESIGN=1 ./Scripts/package-app.sh
+./Scripts/package-app.sh
 ```
 
 Scanner benchmarks use generated fixtures and do not touch user folders:

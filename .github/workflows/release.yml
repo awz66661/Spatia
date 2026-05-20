@@ -26,11 +26,11 @@ jobs:
       - name: Test
         run: ./Scripts/test.sh
 
-      - name: Package unsigned DMG
+      - name: Package DMG
         id: package
         run: |
           VERSION="$(cat VERSION | tr -d '[:space:]')"
-          DMG_PATH="$(SKIP_CODESIGN=1 ./Scripts/package-dmg.sh | tail -n 1)"
+          DMG_PATH="$(./Scripts/package-dmg.sh | tail -n 1)"
           echo "version=${VERSION}" >> "${GITHUB_OUTPUT}"
           echo "dmg_path=${DMG_PATH}" >> "${GITHUB_OUTPUT}"
           echo "sha256_path=${DMG_PATH}.sha256" >> "${GITHUB_OUTPUT}"
@@ -63,7 +63,7 @@ jobs:
           cat > release-notes.md <<EOF
           Spatia ${VERSION}
 
-          This is an unsigned early prerelease build for manual review.
+          This is an ad-hoc signed early prerelease build for manual review.
 
           Important:
           - This DMG is not notarized.

@@ -10,7 +10,7 @@ Run this checklist before publishing a prerelease or after changing scanner, tre
 ./Scripts/build-debug.sh
 ./Scripts/test.sh
 ./Scripts/benchmark-scanner.sh
-SKIP_CODESIGN=1 ./Scripts/package-dmg.sh
+./Scripts/package-dmg.sh
 ```
 
 Review the benchmark output for every fixture. `firstSnapshotMilliseconds` should stay well below the full scan duration; large regressions mean the progressive scan path needs investigation before release.
@@ -41,7 +41,7 @@ Review the benchmark output for every fixture. `firstSnapshotMilliseconds` shoul
 
 ## Package Artifact
 
-- Mount the unsigned DMG from `dist`.
+- Mount the ad-hoc signed DMG from `dist`.
 - Launch `Spatia.app` from the mounted image or copied app bundle.
 - Repeat one small scan and one action smoke test.
-- Confirm any release notes mention the unsigned and not-notarized caveat.
+- Confirm any release notes mention the ad-hoc signed and not-notarized caveat.
