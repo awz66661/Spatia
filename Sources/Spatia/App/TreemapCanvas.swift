@@ -63,8 +63,8 @@ private struct MouseDownTarget {
 
 private struct SnapshotLayoutIdentity: Hashable {
     var rootID: NodeID
+    var revision: UInt64
     var nodeCount: Int
-    var storageAddress: UInt
 }
 
 private struct TreemapLayoutCacheKey: Hashable {
@@ -497,13 +497,10 @@ final class TreemapNSView: NSView {
     }
 
     private func snapshotIdentity(for snapshot: FileTreeSnapshot) -> SnapshotLayoutIdentity {
-        let storageAddress = snapshot.nodes.withUnsafeBufferPointer { buffer in
-            buffer.baseAddress.map { UInt(bitPattern: $0) } ?? 0
-        }
         return SnapshotLayoutIdentity(
             rootID: snapshot.rootID,
-            nodeCount: snapshot.nodes.count,
-            storageAddress: storageAddress
+            revision: snapshot.revision,
+            nodeCount: snapshot.nodes.count
         )
     }
 

@@ -1035,8 +1035,8 @@ private struct SnapshotDerivedKey: Hashable, Sendable {
     var snapshotRootID: NodeID
     var displayRootID: NodeID
     var searchRootID: NodeID
+    var snapshotRevision: UInt64
     var nodeCount: Int
-    var nodeStorageAddress: UInt
     var rootLogicalSize: Int64
     var rootAllocatedSize: Int64
     var displayRootLogicalSize: Int64
@@ -1046,10 +1046,8 @@ private struct SnapshotDerivedKey: Hashable, Sendable {
         self.snapshotRootID = snapshot.rootID
         self.displayRootID = displayRootID
         self.searchRootID = searchRootID ?? displayRootID
+        self.snapshotRevision = snapshot.revision
         self.nodeCount = snapshot.nodes.count
-        self.nodeStorageAddress = snapshot.nodes.withUnsafeBufferPointer { buffer in
-            buffer.baseAddress.map { UInt(bitPattern: $0) } ?? 0
-        }
         self.rootLogicalSize = snapshot.root?.logicalSize ?? 0
         self.rootAllocatedSize = snapshot.root?.allocatedSize ?? 0
         self.displayRootLogicalSize = snapshot[displayRootID]?.logicalSize ?? 0

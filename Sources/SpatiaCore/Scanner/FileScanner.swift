@@ -85,6 +85,7 @@ public enum ScanEvent: Sendable {
 public struct ScanAccumulator: Sendable {
     private var nodes: [FileNode] = []
     private var rootID: NodeID?
+    private var revision: UInt64 = 0
     public private(set) var summary: ScanSummary?
     public private(set) var issues: [ScanIssue] = []
 
@@ -92,7 +93,7 @@ public struct ScanAccumulator: Sendable {
 
     public var snapshot: FileTreeSnapshot? {
         guard let rootID else { return nil }
-        return FileTreeSnapshot(nodes: nodes, rootID: rootID)
+        return FileTreeSnapshot(nodes: nodes, rootID: rootID, revision: revision)
     }
 
     public var result: ScanResult? {
@@ -105,6 +106,7 @@ public struct ScanAccumulator: Sendable {
         case .started:
             nodes = []
             rootID = nil
+            revision = 0
             summary = nil
             issues = []
         case let .nodeDiscovered(node):
@@ -132,6 +134,7 @@ public struct ScanAccumulator: Sendable {
                 allocated: node.allocatedSize - oldNode.allocatedSize,
                 toAncestorsOf: node.parentID
             )
+            revision &+= 1
         } else {
             precondition(index == nodes.count, "Scan events must discover nodes in node ID order.")
             nodes.append(node)
@@ -143,6 +146,7 @@ public struct ScanAccumulator: Sendable {
                     toAncestorsOf: parentID
                 )
             }
+            revision &+= 1
         }
     }
 

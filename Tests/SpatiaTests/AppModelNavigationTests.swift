@@ -294,13 +294,14 @@ final class AppModelNavigationTests: XCTestCase {
         }
         XCTAssertEqual(model.insightCategoryUsageItems.first?.allocatedBytes, 80)
 
-        var snapshot = sidebarSnapshot()
-        snapshot.nodes[0].logicalSize = 160
-        snapshot.nodes[0].allocatedSize = 160
-        snapshot.nodes[1].logicalSize = 90
-        snapshot.nodes[1].allocatedSize = 90
-        snapshot.nodes[4].logicalSize = 90
-        snapshot.nodes[4].allocatedSize = 90
+        var nodes = sidebarSnapshot().nodes
+        nodes[0].logicalSize = 160
+        nodes[0].allocatedSize = 160
+        nodes[1].logicalSize = 90
+        nodes[1].allocatedSize = 90
+        nodes[4].logicalSize = 90
+        nodes[4].allocatedSize = 90
+        let snapshot = FileTreeSnapshot(nodes: nodes, rootID: 0, revision: 1)
         model.result = ScanResult(
             snapshot: snapshot,
             summary: ScanSummary(

@@ -14,6 +14,7 @@ final class FileTreeSnapshotMutationTests: XCTestCase {
             rootID: 0
         )
 
+        XCTAssertEqual(snapshot.revision, 0)
         let removed = snapshot.detachSubtree(rootedAt: 1)
 
         XCTAssertEqual(removed?.fileCount, 1)
@@ -22,6 +23,7 @@ final class FileTreeSnapshotMutationTests: XCTestCase {
         XCTAssertEqual(snapshot.root?.children, [2])
         XCTAssertEqual(snapshot.root?.allocatedSize, 30)
         XCTAssertEqual(snapshot[1]?.scanState, .skipped)
+        XCTAssertEqual(snapshot.revision, 1)
     }
 
     func testDetachRootIsRefused() {
@@ -33,6 +35,7 @@ final class FileTreeSnapshotMutationTests: XCTestCase {
         )
 
         XCTAssertNil(snapshot.detachSubtree(rootedAt: 0))
+        XCTAssertEqual(snapshot.revision, 0)
     }
 
     func testExpandPackageAppendsRemappedChildrenAndUpdatesAncestorSizes() {
@@ -52,6 +55,7 @@ final class FileTreeSnapshotMutationTests: XCTestCase {
             rootID: 0
         )
 
+        XCTAssertEqual(snapshot.revision, 0)
         let expanded = snapshot.expandPackageSubtree(rootedAt: 1, with: expandedSnapshot)
 
         XCTAssertEqual(expanded?.appendedNodeIDs, [2, 3])
@@ -61,5 +65,6 @@ final class FileTreeSnapshotMutationTests: XCTestCase {
         XCTAssertEqual(snapshot[2]?.parentID, 1)
         XCTAssertEqual(snapshot[2]?.children, [3])
         XCTAssertEqual(snapshot[3]?.parentID, 2)
+        XCTAssertEqual(snapshot.revision, 1)
     }
 }

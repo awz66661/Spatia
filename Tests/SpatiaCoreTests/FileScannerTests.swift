@@ -61,6 +61,35 @@ final class FileScannerTests: XCTestCase {
         })
     }
 
+    func testScanAccumulatorRevisionChangesWhenExistingNodesChange() throws {
+        let rootURL = URL(fileURLWithPath: "/tmp/root", isDirectory: true)
+        let root = FileNode(
+            id: 0,
+            parentID: nil,
+            name: "root",
+            url: rootURL,
+            kind: .directory,
+            logicalSize: 0,
+            allocatedSize: 0,
+            scanState: .scanning
+        )
+        var finishedRoot = root
+        finishedRoot.logicalSize = 42
+        finishedRoot.allocatedSize = 42
+        finishedRoot.scanState = .complete
+
+        var accumulator = ScanAccumulator()
+        accumulator.consume(.started(root: rootURL, startedAt: Date()))
+        accumulator.consume(.nodeDiscovered(root))
+        let firstSnapshot = try XCTUnwrap(accumulator.snapshot)
+        accumulator.consume(.directoryFinished(finishedRoot))
+        let updatedSnapshot = try XCTUnwrap(accumulator.snapshot)
+
+        XCTAssertEqual(firstSnapshot.nodes.count, updatedSnapshot.nodes.count)
+        XCTAssertEqual(updatedSnapshot.root?.allocatedSize, 42)
+        XCTAssertGreaterThan(updatedSnapshot.revision, firstSnapshot.revision)
+    }
+
     func testCanExcludeHiddenFiles() throws {
         let fixture = try ScannerFixture()
         defer { try? fixture.tearDown() }

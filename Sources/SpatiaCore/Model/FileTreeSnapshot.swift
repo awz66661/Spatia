@@ -1,12 +1,14 @@
 import Foundation
 
 public struct FileTreeSnapshot: Sendable {
-    public var nodes: [FileNode]
+    public private(set) var nodes: [FileNode]
     public var rootID: NodeID
+    public private(set) var revision: UInt64
 
-    public init(nodes: [FileNode], rootID: NodeID) {
+    public init(nodes: [FileNode], rootID: NodeID, revision: UInt64 = 0) {
         self.nodes = nodes
         self.rootID = rootID
+        self.revision = revision
     }
 
     public var root: FileNode? {
@@ -83,6 +85,7 @@ public struct FileTreeSnapshot: Sendable {
             nodes[Int(removedID)].scanState = .skipped
         }
 
+        incrementRevision()
         return summary
     }
 
@@ -129,11 +132,13 @@ public struct FileTreeSnapshot: Sendable {
             toAncestorsOf: packageNode.parentID
         )
 
-        return ExpandedSubtreeSummary(
+        let summary = ExpandedSubtreeSummary(
             appendedNodeIDs: subtreeIDs(rootedAt: packageID).filter { $0 != packageID },
             logicalDelta: logicalDelta,
             allocatedDelta: allocatedDelta
         )
+        incrementRevision()
+        return summary
     }
 
     private mutating func appendSubtree(
@@ -177,6 +182,10 @@ public struct FileTreeSnapshot: Sendable {
             nodes[Int(currentID)].allocatedSize = max(0, current.allocatedSize + allocated)
             ancestorID = current.parentID
         }
+    }
+
+    private mutating func incrementRevision() {
+        revision &+= 1
     }
 }
 
