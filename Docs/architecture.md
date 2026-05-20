@@ -27,12 +27,14 @@ Spatia
 - `RecursiveTreemapBuilder` builds 2-3 visible levels from a `FileTreeSnapshot`.
 - `SquarifiedTreemapLayout` supports readability-first weighting and a SpaceSniffer-style alternating orientation policy.
 - `FileCategoryClassifier` maps scanner metadata, UTType hints, extensions, and protected paths into stable visual categories.
-- `MainWindowView` uses a solid-color top bar plus a three-column utility layout with stable separators.
+- `MainWindowView` uses a native SwiftUI `NavigationSplitView` shell with the system sidebar toggle, a full-height material sidebar, and restrained glass only on content overlays such as the selected-item inspector.
+- `PathRiskPolicy` centralizes path risk classification for scanner flags, category classification, UI risk state, and trash safety decisions.
+- `MacActions` contains macOS-specific actions such as Quick Look, reveal in Finder, copy path, and selected-item Move to Trash.
 
 ## Planned Production Shape
 
 ```text
-SwiftUI shell
+SwiftUI NavigationSplitView shell
   -> AppModel / scan state
   -> AppKit TreemapCanvas
   -> CoreGraphics renderer
@@ -50,7 +52,24 @@ User chooses source
   -> SquarifiedTreemapLayout converts siblings into readable-weighted tiles
   -> TreemapNSView draws tiles and handles hit testing
   -> Inspector reads selected FileNode
+  -> SafetyPolicy evaluates selected-item Trash availability
 ```
+
+## Scanner Notes
+
+Spatia defaults to allocated size because users usually care about disk usage rather than logical file length. The inspector shows both disk usage and file size.
+
+The current scanner is a Foundation-based implementation that recursively reads the selected directory, aggregates logical and allocated sizes, treats packages as opaque by default, collects unreadable path issues, and does not follow symlink directories. Package expansion should become an explicit user action.
+
+Actual recoverable space can differ from displayed allocated size on APFS because of clones, sparse files, compression, purgeable data, iCloud placeholders, local snapshots, and shared APFS container space. The UI must not promise exact recoverable space.
+
+Scanner benchmarks use synthetic fixtures:
+
+```sh
+./Scripts/benchmark-scanner.sh
+```
+
+These benchmarks are coarse regression signals, not product performance guarantees.
 
 ## Near-Term Refactor Points
 

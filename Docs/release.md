@@ -32,6 +32,7 @@ On GitHub tag builds, the tag must be `v$(cat VERSION)`. For example, `VERSION=0
 
 - `main` push and pull requests run `.github/workflows/ci.yml`.
 - CI checks version consistency, builds, tests, and performs an unsigned DMG smoke package.
+- CI and release workflows use macOS 26 runners because the package minimum platform is macOS 26.
 - `v*` tags run `.github/workflows/release.yml`.
 - Release workflow checks version consistency, builds, tests, packages an unsigned DMG, verifies it, and creates a GitHub draft prerelease.
 

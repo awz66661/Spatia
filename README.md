@@ -35,12 +35,23 @@ Spatia is pre-1.0 macOS software.
 - App Store: not planned for the first phase.
 - Deletion: limited to selected-item Move to Trash; permanent deletion and bulk deletion are not implemented.
 
+## Product Boundaries
+
+Spatia is deliberately a visual explorer, not a Mac cleaner.
+
+- Show and explain disk usage before offering actions.
+- Keep filesystem access explicit and user initiated.
+- Use safe macOS actions first: Quick Look, Reveal in Finder, Copy Path, and Move to Trash.
+- Limit deletion to one selected item, only after safety checks and confirmation.
+- Summarize inaccessible locations without pressuring the user to grant broad permissions.
+- Avoid cleanup recommendations, system optimization claims, background indexing, telemetry, cloud sync, permanent deletion, and automatic cleanup.
+
 ## Build From Source
 
 Requirements:
 
 - macOS 26 or newer
-- Full Xcode recommended
+- Xcode 26 or newer recommended
 - Swift 6.2 or newer
 
 ```sh
@@ -61,25 +72,34 @@ Open `Package.swift` in Xcode for native UI work.
 
 Release builds are created from version tags. Pushes to `main` run CI and unsigned packaging smoke tests only; pushing a tag such as `v0.1.0` creates a draft prerelease with the unsigned DMG and checksum attached.
 
+## Current Limitations
+
+- Early release artifacts are unsigned and not notarized.
+- Protected folders may produce partial scan results until the user grants Full Disk Access.
+- Move to Trash is available only for the selected item after safety checks and confirmation.
+- Permanent deletion, bulk deletion, automatic cleanup, and cleanup recommendations are not implemented.
+- Displayed allocated size may not equal recoverable space on APFS because of clones, sparse files, compression, purgeable data, iCloud placeholders, and snapshots.
+
+## Privacy And Permissions
+
+Spatia keeps scan results local. It does not upload file names or paths, collect telemetry, run a background daemon, or scan locations without user action.
+
+The first release does not ask for Full Disk Access on launch. Users can scan Downloads, Desktop, Documents, Applications, Home, or a chosen folder. If protected locations cannot be read, Spatia keeps the partial result and reports unreadable paths.
+
 ## Project Layout
 
 - `Sources/Spatia`: macOS app target.
 - `Sources/SpatiaCore`: scanner, model, formatting, treemap layout, hit testing, and safety rules.
 - `Sources/SpatiaBenchmarks`: synthetic scanner benchmark target.
 - `Tests`: scanner, treemap, navigation, category, hit-testing, and safety-policy tests.
-- `Docs`: product, architecture, privacy, permissions, release, and development notes.
+- `Docs`: architecture and release notes.
 
 ## Documentation
 
-- [Product](Docs/product.md)
 - [Architecture](Docs/architecture.md)
-- [Development](Docs/development.md)
-- [Permissions](Docs/permissions.md)
-- [Scanning](Docs/scanning.md)
-- [Roadmap](Docs/roadmap.md)
-- [Testing](Docs/testing.md)
 - [Release](Docs/release.md)
-- [Privacy](Docs/privacy.md)
+- [Contributing](CONTRIBUTING.md)
+- [Security](SECURITY.md)
 
 ## Contributing
 
