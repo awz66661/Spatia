@@ -11,6 +11,7 @@ final class AppModel: ObservableObject {
     @Published var statusText = "Choose a folder to scan."
     @Published var currentScanURL: URL?
     @Published var scanPreferences = ScanPreferences()
+    @Published private var syntheticOtherSelection: SyntheticOtherSelection?
     @Published private var expandedTreemapNodeIDsStorage: Set<NodeID> = []
 
     var confirmMoveToTrash: (TrashConfirmation) -> Bool = MacActions.confirmMoveToTrash
@@ -37,6 +38,14 @@ final class AppModel: ObservableObject {
     var selectedNode: FileNode? {
         guard let selectedID else { return nil }
         return snapshot?[selectedID]
+    }
+
+    var selectedOtherDetail: OtherSmallFilesDetail? {
+        guard let syntheticOtherSelection else { return nil }
+        return OtherSmallFilesDetail(
+            diskUsage: ByteCount.string(syntheticOtherSelection.size),
+            displayRootName: displayRoot.map(displayName(for:))
+        )
     }
 
     var expandedTreemapNodeIDs: Set<NodeID> {
@@ -177,6 +186,7 @@ final class AppModel: ObservableObject {
         isScanning = true
         result = nil
         selectedID = nil
+        syntheticOtherSelection = nil
         displayRootID = nil
         expandedTreemapNodeIDsStorage = []
         currentScanURL = url
@@ -202,11 +212,22 @@ final class AppModel: ObservableObject {
     }
 
     func select(_ id: NodeID?) {
-        let resolvedID = id == syntheticOtherNodeID ? nil : id
+        guard id != syntheticOtherNodeID else {
+            selectedID = nil
+            return
+        }
+
+        let resolvedID = id
+        syntheticOtherSelection = nil
         selectedID = resolvedID
 
         guard let resolvedID else { return }
         expandedTreemapNodeIDsStorage.formUnion(expansionPathNodeIDs(for: resolvedID))
+    }
+
+    func selectSyntheticOther(size: Int64) {
+        selectedID = nil
+        syntheticOtherSelection = SyntheticOtherSelection(size: size)
     }
 
     func setIncludeHiddenFiles(_ includeHiddenFiles: Bool) {
@@ -237,6 +258,7 @@ final class AppModel: ObservableObject {
         guard node.kind == .directory || node.kind == .package else { return }
         displayRootID = node.id
         selectedID = nil
+        syntheticOtherSelection = nil
         expandedTreemapNodeIDsStorage = []
     }
 
@@ -301,6 +323,7 @@ final class AppModel: ObservableObject {
         guard let displayRoot, let parentID = displayRoot.parentID else { return }
         displayRootID = parentID
         selectedID = nil
+        syntheticOtherSelection = nil
         expandedTreemapNodeIDsStorage = []
     }
 
@@ -309,6 +332,7 @@ final class AppModel: ObservableObject {
         guard breadcrumb.contains(where: { $0.id == id }) else { return }
         displayRootID = id
         selectedID = nil
+        syntheticOtherSelection = nil
         expandedTreemapNodeIDsStorage = []
     }
 
@@ -402,6 +426,7 @@ final class AppModel: ObservableObject {
 
         result = scanResult
         selectedID = nil
+        syntheticOtherSelection = nil
         expandedTreemapNodeIDsStorage.subtract(removedIDs)
         if displayRootID == nodeID {
             displayRootID = snapshot.rootID
@@ -487,6 +512,15 @@ struct ScanPreferences: Hashable {
             cancellationSource: cancellationSource
         )
     }
+}
+
+struct SyntheticOtherSelection: Hashable {
+    var size: Int64
+}
+
+struct OtherSmallFilesDetail: Hashable {
+    var diskUsage: String
+    var displayRootName: String?
 }
 
 struct DisplayRootChildSummary: Identifiable, Hashable {

@@ -9,12 +9,14 @@ struct TreemapCanvas: NSViewRepresentable {
     @Binding var selectedID: NodeID?
     var onActivate: (NodeID) -> Void
     var onPreview: (NodeID) -> Void
+    var onSyntheticOtherSelect: (Int64) -> Void
 
     func makeNSView(context: Context) -> TreemapNSView {
         let view = TreemapNSView()
         view.onSelect = { selectedID = $0 }
         view.onActivate = onActivate
         view.onPreview = onPreview
+        view.onSyntheticOtherSelect = onSyntheticOtherSelect
         return view
     }
 
@@ -26,6 +28,7 @@ struct TreemapCanvas: NSViewRepresentable {
         nsView.onSelect = { selectedID = $0 }
         nsView.onActivate = onActivate
         nsView.onPreview = onPreview
+        nsView.onSyntheticOtherSelect = onSyntheticOtherSelect
     }
 }
 
@@ -66,6 +69,7 @@ final class TreemapNSView: NSView {
     var onSelect: ((NodeID?) -> Void)?
     var onActivate: ((NodeID) -> Void)?
     var onPreview: ((NodeID) -> Void)?
+    var onSyntheticOtherSelect: ((Int64) -> Void)?
 
     private var renderedTiles: [Tile] = []
     private var trackingArea: NSTrackingArea?
@@ -165,16 +169,16 @@ final class TreemapNSView: NSView {
         let hit = hitTester.hitTest(point: point, tiles: renderedTiles)
 
         if event.clickCount == 2 {
-            let targetID = doubleClickTarget(at: point, fallback: hit?.nodeID)
-            onSelect?(targetID)
-            if let targetID, targetID != syntheticOtherNodeID {
+            let targetTile = doubleClickTarget(at: point, fallback: hit)
+            select(targetTile)
+            if let targetID = targetTile?.nodeID, targetID != syntheticOtherNodeID {
                 onActivate?(targetID)
             }
             pendingDoubleClickTarget = nil
             return
         }
 
-        onSelect?(hit?.nodeID)
+        select(hit)
         pendingDoubleClickTarget = hit.map { MouseDownTarget(nodeID: $0.nodeID, rootID: rootID, point: point) }
     }
 
@@ -195,13 +199,22 @@ final class TreemapNSView: NSView {
         super.keyDown(with: event)
     }
 
-    private func doubleClickTarget(at point: CGPoint, fallback nodeID: NodeID?) -> NodeID? {
+    private func select(_ tile: Tile?) {
+        if let tile, tile.nodeID == syntheticOtherNodeID {
+            onSelect?(nil)
+            onSyntheticOtherSelect?(tile.size)
+        } else {
+            onSelect?(tile?.nodeID)
+        }
+    }
+
+    private func doubleClickTarget(at point: CGPoint, fallback tile: Tile?) -> Tile? {
         guard let pendingDoubleClickTarget,
               pendingDoubleClickTarget.rootID == rootID,
               pendingDoubleClickTarget.distance(to: point) <= doubleClickTargetTolerance else {
-            return nodeID
+            return tile
         }
-        return pendingDoubleClickTarget.nodeID
+        return renderedTiles.first { $0.nodeID == pendingDoubleClickTarget.nodeID } ?? tile
     }
 
     private func draw(_ tile: Tile, in context: CGContext) {

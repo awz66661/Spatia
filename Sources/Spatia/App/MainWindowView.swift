@@ -406,6 +406,9 @@ private struct TreemapDetailView: View {
                     },
                     onPreview: { nodeID in
                         model.quickLook(nodeID)
+                    },
+                    onSyntheticOtherSelect: { size in
+                        model.selectSyntheticOther(size: size)
                     }
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -413,6 +416,11 @@ private struct TreemapDetailView: View {
                 .safeAreaInset(edge: .bottom, spacing: 0) {
                     if let detail = model.selectedNodeDetail {
                         SelectionDetailPanel(detail: detail)
+                            .padding(.horizontal, 18)
+                            .padding(.top, 8)
+                            .padding(.bottom, 16)
+                    } else if let detail = model.selectedOtherDetail {
+                        OtherSmallFilesDetailPanel(detail: detail)
                             .padding(.horizontal, 18)
                             .padding(.top, 8)
                             .padding(.bottom, 16)
@@ -477,6 +485,43 @@ private struct SelectionDetailPanel: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
             }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 13)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: DesignTokens.inspectorCornerRadius, style: .continuous))
+    }
+}
+
+private struct OtherSmallFilesDetailPanel: View {
+    var detail: OtherSmallFilesDetail
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 14) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Other small files")
+                        .font(.headline)
+                        .lineLimit(1)
+
+                    Text(detail.displayRootName.map { "Grouped inside \($0)" } ?? "Grouped small visible items")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                InfoPair(label: "Disk", value: detail.diskUsage)
+                    .frame(width: 120, alignment: .leading)
+            }
+
+            Label(
+                "These items are grouped because they are too small to draw as useful individual tiles.",
+                systemImage: "square.stack.3d.up"
+            )
+            .font(.caption)
+            .foregroundStyle(.secondary)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 13)

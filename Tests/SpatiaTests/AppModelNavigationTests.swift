@@ -378,6 +378,35 @@ final class AppModelNavigationTests: XCTestCase {
         XCTAssertEqual(model.expandedTreemapNodeIDs, [1])
     }
 
+    func testSelectingSyntheticOtherShowsReadOnlyDetail() {
+        let model = AppModel()
+        model.result = ScanResult(
+            snapshot: sidebarSnapshot(),
+            summary: ScanSummary(
+                rootURL: URL(fileURLWithPath: "/tmp/root", isDirectory: true),
+                fileCount: 2,
+                folderCount: 3,
+                logicalBytes: 100,
+                allocatedBytes: 100,
+                duration: 1
+            ),
+            issues: []
+        )
+        model.displayRootID = 0
+        model.select(1)
+
+        model.selectSyntheticOther(size: 40)
+
+        XCTAssertNil(model.selectedID)
+        XCTAssertEqual(model.expandedTreemapNodeIDs, [1])
+        XCTAssertEqual(model.selectedOtherDetail?.diskUsage, ByteCount.string(40))
+        XCTAssertEqual(model.selectedOtherDetail?.displayRootName, "root")
+
+        model.select(nil)
+
+        XCTAssertNil(model.selectedOtherDetail)
+    }
+
     func testEnterDirectoryClearsExpandedTreemapNodeIDs() {
         let model = AppModel()
         model.result = ScanResult(
