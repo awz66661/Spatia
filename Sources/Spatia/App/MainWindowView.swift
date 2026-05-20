@@ -7,8 +7,8 @@ enum DesignTokens {
     static let sidebarMaxWidth: CGFloat = 280
     static let rowIconColumnWidth: CGFloat = 24
     static let detailMinWidth: CGFloat = 760
-    static let treemapInset: CGFloat = 16
-    static let currentViewStripHeight: CGFloat = 58
+    static let treemapInset: CGFloat = 10
+    static let currentViewStripHeight: CGFloat = 52
     static let rightInspectorMinWidth: CGFloat = 300
     static let rightInspectorIdealWidth: CGFloat = 340
     static let rightInspectorMaxWidth: CGFloat = 430

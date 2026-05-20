@@ -18,17 +18,18 @@ struct CanvasNavigationBar: View {
             BreadcrumbPathBar(nodes: model.breadcrumb) { nodeID in
                 model.navigateToBreadcrumb(nodeID)
             }
-            .frame(maxWidth: 560, alignment: .leading)
-
-            Spacer(minLength: 12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .layoutPriority(2)
 
             if let summary = model.currentViewSummary {
+                Spacer(minLength: 8)
                 CanvasSummaryMetrics(summary: summary)
+                    .layoutPriority(0)
             }
         }
-        .padding(.horizontal, 18)
-        .padding(.top, 10)
-        .padding(.bottom, 6)
+        .padding(.horizontal, 14)
+        .padding(.top, 6)
+        .padding(.bottom, 4)
     }
 }
 
@@ -70,42 +71,37 @@ private struct CanvasMetric: View {
 struct CurrentViewStrip: View {
     @EnvironmentObject private var model: AppModel
 
+    @ViewBuilder
     var body: some View {
-        Group {
-            if model.isCanvasScopeLoading(.currentView) {
-                HStack(spacing: 8) {
-                    ProgressView()
-                        .controlSize(.mini)
-                    Text("Loading current view...")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 18)
-            } else if model.currentViewItems.isEmpty {
-                Text("No sizeable children in this view.")
+        if model.isCanvasScopeLoading(.currentView) {
+            HStack(spacing: 8) {
+                ProgressView()
+                    .controlSize(.mini)
+                Text("Loading current view...")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 18)
-            } else {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    LazyHStack(spacing: 8) {
-                        ForEach(model.currentViewItems) { item in
-                            CurrentViewItemButton(
-                                item: item,
-                                isSelected: model.selectedID == item.id
-                            ) {
-                                model.openCurrentViewItem(item.id)
-                            }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(height: 36)
+            .padding(.horizontal, 14)
+            .padding(.bottom, 4)
+        } else if !model.currentViewItems.isEmpty {
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(spacing: 8) {
+                    ForEach(model.currentViewItems) { item in
+                        CurrentViewItemButton(
+                            item: item,
+                            isSelected: model.selectedID == item.id
+                        ) {
+                            model.openCurrentViewItem(item.id)
                         }
                     }
-                    .padding(.horizontal, 18)
                 }
+                .padding(.horizontal, 14)
             }
+            .frame(height: DesignTokens.currentViewStripHeight)
+            .padding(.bottom, 4)
         }
-        .frame(height: DesignTokens.currentViewStripHeight)
-        .padding(.bottom, 6)
     }
 }
 
