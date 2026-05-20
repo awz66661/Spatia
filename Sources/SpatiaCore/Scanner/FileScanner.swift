@@ -74,6 +74,90 @@ public enum ScanIssueKind: String, Hashable, Sendable {
     case unreadable
 }
 
+public enum ScanEvent: Sendable {
+    case started(root: URL, startedAt: Date)
+    case nodeDiscovered(FileNode)
+    case directoryFinished(FileNode)
+    case issue(ScanIssue)
+    case finished(ScanSummary)
+}
+
+public struct ScanAccumulator: Sendable {
+    private var nodes: [FileNode] = []
+    private var rootID: NodeID?
+    public private(set) var summary: ScanSummary?
+    public private(set) var issues: [ScanIssue] = []
+
+    public init() {}
+
+    public var snapshot: FileTreeSnapshot? {
+        guard let rootID else { return nil }
+        return FileTreeSnapshot(nodes: nodes, rootID: rootID)
+    }
+
+    public var result: ScanResult? {
+        guard let snapshot, let summary else { return nil }
+        return ScanResult(snapshot: snapshot, summary: summary, issues: issues)
+    }
+
+    public mutating func consume(_ event: ScanEvent) {
+        switch event {
+        case .started:
+            nodes = []
+            rootID = nil
+            summary = nil
+            issues = []
+        case let .nodeDiscovered(node):
+            upsert(node)
+        case let .directoryFinished(node):
+            upsert(node)
+        case let .issue(issue):
+            issues.append(issue)
+        case let .finished(scanSummary):
+            summary = scanSummary
+        }
+    }
+
+    private mutating func upsert(_ node: FileNode) {
+        let index = Int(node.id)
+        if rootID == nil {
+            rootID = node.id
+        }
+
+        if nodes.indices.contains(index) {
+            let oldNode = nodes[index]
+            nodes[index] = node
+            applySizeDelta(
+                logical: node.logicalSize - oldNode.logicalSize,
+                allocated: node.allocatedSize - oldNode.allocatedSize,
+                toAncestorsOf: node.parentID
+            )
+        } else {
+            precondition(index == nodes.count, "Scan events must discover nodes in node ID order.")
+            nodes.append(node)
+            if let parentID = node.parentID, nodes.indices.contains(Int(parentID)) {
+                nodes[Int(parentID)].children.append(node.id)
+                applySizeDelta(
+                    logical: node.logicalSize,
+                    allocated: node.allocatedSize,
+                    toAncestorsOf: parentID
+                )
+            }
+        }
+    }
+
+    private mutating func applySizeDelta(logical: Int64, allocated: Int64, toAncestorsOf parentID: NodeID?) {
+        guard logical != 0 || allocated != 0 else { return }
+
+        var currentID = parentID
+        while let id = currentID, nodes.indices.contains(Int(id)) {
+            nodes[Int(id)].logicalSize += logical
+            nodes[Int(id)].allocatedSize += allocated
+            currentID = nodes[Int(id)].parentID
+        }
+    }
+}
+
 typealias ResourceValuesProvider = @Sendable (URL, Set<URLResourceKey>) throws -> URLResourceValues
 
 public struct FileScanner: Sendable {
@@ -96,15 +180,27 @@ public struct FileScanner: Sendable {
     }
 
     public func scan(root: URL) -> ScanResult {
-        var builder = FileTreeBuilder(
+        var accumulator = ScanAccumulator()
+        scanEvents(root: root) { event in
+            accumulator.consume(event)
+        }
+        guard let result = accumulator.result else {
+            preconditionFailure("Scanner finished without producing a scan result.")
+        }
+        return result
+    }
+
+    public func scanEvents(root: URL, receive: @escaping (ScanEvent) -> Void) {
+        var engine = FileScanEngine(
             options: options,
-            resourceValuesProvider: resourceValuesProvider
+            resourceValuesProvider: resourceValuesProvider,
+            receive: receive
         )
-        return builder.scan(root: root.standardizedFileURL)
+        engine.scan(root: root.standardizedFileURL)
     }
 }
 
-private struct FileTreeBuilder {
+private struct FileScanEngine {
     private struct DirectoryContents {
         var urls: [URL]
         var issue: ScanIssue?
@@ -115,11 +211,17 @@ private struct FileTreeBuilder {
         var issue: ScanIssue?
     }
 
+    private struct ScannedNode {
+        var id: NodeID
+        var logicalSize: Int64
+        var allocatedSize: Int64
+    }
+
     private let options: ScanOptions
     private let fileManager = FileManager.default
     private let resourceValuesProvider: ResourceValuesProvider
-    private var nodes: [FileNode] = []
-    private var issues: [ScanIssue] = []
+    private let receive: (ScanEvent) -> Void
+    private var nextID: NodeID = 0
     private var fileCount = 0
     private var folderCount = 0
 
@@ -146,16 +248,18 @@ private struct FileTreeBuilder {
 
     init(
         options: ScanOptions,
-        resourceValuesProvider: @escaping ResourceValuesProvider
+        resourceValuesProvider: @escaping ResourceValuesProvider,
+        receive: @escaping (ScanEvent) -> Void
     ) {
         self.options = options
         self.resourceValuesProvider = resourceValuesProvider
+        self.receive = receive
     }
 
-    mutating func scan(root: URL) -> ScanResult {
+    mutating func scan(root: URL) {
         let startedAt = Date()
-        let rootID = scanNode(at: root, parentID: nil, depth: 0)
-        let rootNode = nodes[Int(rootID)]
+        receive(.started(root: root, startedAt: startedAt))
+        let rootNode = scanNode(at: root, parentID: nil, depth: 0)
         let duration = Date().timeIntervalSince(startedAt)
 
         let summary = ScanSummary(
@@ -166,19 +270,14 @@ private struct FileTreeBuilder {
             allocatedBytes: rootNode.allocatedSize,
             duration: duration
         )
-
-        return ScanResult(
-            snapshot: FileTreeSnapshot(nodes: nodes, rootID: rootID),
-            summary: summary,
-            issues: issues
-        )
+        receive(.finished(summary))
     }
 
-    private mutating func scanNode(at url: URL, parentID: NodeID?, depth: Int) -> NodeID {
+    private mutating func scanNode(at url: URL, parentID: NodeID?, depth: Int) -> ScannedNode {
         let resourceRead = resourceValues(for: url)
         let values = resourceRead.values
         let kind = nodeKind(for: values)
-        let id = NodeID(nodes.count)
+        let id = nextNodeID()
         let name = url.lastPathComponent.isEmpty ? url.path : url.lastPathComponent
         var flags = nodeFlags(for: values)
         if resourceRead.issue?.kind == .permissionDenied {
@@ -189,71 +288,78 @@ private struct FileTreeBuilder {
             flags.insert(.systemProtected)
         }
 
-        nodes.append(
-            FileNode(
-                id: id,
-                parentID: parentID,
-                name: name,
-                url: url,
-                kind: kind,
-                flags: flags,
-                typeIdentifier: typeIdentifier(for: url, values: values),
-                logicalSize: fileLogicalSize(values),
-                allocatedSize: fileAllocatedSize(values),
-                modifiedAt: values?.contentModificationDate,
-                children: [],
-                scanState: .scanning
-            )
+        var node = FileNode(
+            id: id,
+            parentID: parentID,
+            name: name,
+            url: url,
+            kind: kind,
+            flags: flags,
+            typeIdentifier: typeIdentifier(for: url, values: values),
+            logicalSize: fileLogicalSize(values),
+            allocatedSize: fileAllocatedSize(values),
+            modifiedAt: values?.contentModificationDate,
+            children: [],
+            scanState: .scanning
         )
 
         guard !isCancelled else {
-            nodes[Int(id)].scanState = .skipped
-            return id
+            node.scanState = .skipped
+            receive(.nodeDiscovered(node))
+            return ScannedNode(id: id, logicalSize: node.logicalSize, allocatedSize: node.allocatedSize)
         }
 
         if let issue = resourceRead.issue {
-            markMetadataReadFailure(nodeID: id, issue: issue)
-            return id
+            node = metadataReadFailureNode(node, issue: issue)
+            receive(.nodeDiscovered(node))
+            return ScannedNode(id: id, logicalSize: node.logicalSize, allocatedSize: node.allocatedSize)
         }
 
         switch kind {
         case .directory:
             folderCount += 1
-            scanDirectoryNode(id: id, url: url, depth: depth)
+            receive(.nodeDiscovered(node))
+            let finishedNode = scanDirectoryNode(node: node, url: url, depth: depth)
+            receive(.directoryFinished(finishedNode))
+            return ScannedNode(id: id, logicalSize: finishedNode.logicalSize, allocatedSize: finishedNode.allocatedSize)
         case .package:
             folderCount += 1
+            receive(.nodeDiscovered(node))
             if options.expandPackages {
-                scanDirectoryNode(id: id, url: url, depth: depth)
+                let finishedNode = scanDirectoryNode(node: node, url: url, depth: depth)
+                receive(.directoryFinished(finishedNode))
+                return ScannedNode(id: id, logicalSize: finishedNode.logicalSize, allocatedSize: finishedNode.allocatedSize)
             } else {
                 let measured = measureOpaqueDirectory(at: url, depth: depth + 1)
-                nodes[Int(id)].logicalSize = measured.logical
-                nodes[Int(id)].allocatedSize = measured.allocated
+                node.logicalSize = measured.logical
+                node.allocatedSize = measured.allocated
+                node.scanState = isCancelled ? .skipped : .complete
+                receive(.directoryFinished(node))
+                return ScannedNode(id: id, logicalSize: node.logicalSize, allocatedSize: node.allocatedSize)
             }
         case .file, .symlink, .other:
             fileCount += 1
+            node.scanState = .complete
+            receive(.nodeDiscovered(node))
+            return ScannedNode(id: id, logicalSize: node.logicalSize, allocatedSize: node.allocatedSize)
         }
-
-        if nodes[Int(id)].scanState == .scanning {
-            nodes[Int(id)].scanState = isCancelled ? .skipped : .complete
-        }
-        return id
     }
 
-    private mutating func scanDirectoryNode(id: NodeID, url: URL, depth: Int) {
+    private mutating func scanDirectoryNode(node: FileNode, url: URL, depth: Int) -> FileNode {
+        var node = node
         guard !isCancelled else {
-            nodes[Int(id)].scanState = .skipped
-            return
+            node.scanState = .skipped
+            return node
         }
 
         guard shouldDescend(depth: depth) else {
-            nodes[Int(id)].scanState = .skipped
-            return
+            node.scanState = .skipped
+            return node
         }
 
         let contents = contentsOfDirectory(at: url)
         if let issue = contents.issue {
-            markDirectoryReadFailure(nodeID: id, issue: issue)
-            return
+            return directoryReadFailureNode(node, issue: issue)
         }
 
         var children: [NodeID] = []
@@ -262,23 +368,24 @@ private struct FileTreeBuilder {
 
         for childURL in contents.urls {
             guard !isCancelled else {
-                nodes[Int(id)].children = children
-                nodes[Int(id)].logicalSize = logicalSize
-                nodes[Int(id)].allocatedSize = allocatedSize
-                nodes[Int(id)].scanState = .skipped
-                return
+                node.children = children
+                node.logicalSize = logicalSize
+                node.allocatedSize = allocatedSize
+                node.scanState = .skipped
+                return node
             }
 
-            let childID = scanNode(at: childURL, parentID: id, depth: depth + 1)
-            children.append(childID)
-            let child = nodes[Int(childID)]
-            logicalSize += child.logicalSize
-            allocatedSize += child.allocatedSize
+            let childID = scanNode(at: childURL, parentID: node.id, depth: depth + 1)
+            children.append(childID.id)
+            logicalSize += childID.logicalSize
+            allocatedSize += childID.allocatedSize
         }
 
-        nodes[Int(id)].children = children
-        nodes[Int(id)].logicalSize = logicalSize
-        nodes[Int(id)].allocatedSize = allocatedSize
+        node.children = children
+        node.logicalSize = logicalSize
+        node.allocatedSize = allocatedSize
+        node.scanState = isCancelled ? .skipped : .complete
+        return node
     }
 
     private mutating func measureOpaqueDirectory(at url: URL, depth: Int) -> (logical: Int64, allocated: Int64) {
@@ -338,25 +445,29 @@ private struct FileTreeBuilder {
             return DirectoryContents(urls: urls, issue: nil)
         } catch {
             let issue = scanIssue(url: url, error: error)
-            issues.append(issue)
+            receive(.issue(issue))
             return DirectoryContents(urls: [], issue: issue)
         }
     }
 
-    private mutating func markDirectoryReadFailure(nodeID: NodeID, issue: ScanIssue) {
+    private func directoryReadFailureNode(_ node: FileNode, issue: ScanIssue) -> FileNode {
+        var node = node
         if issue.kind == .permissionDenied {
-            nodes[Int(nodeID)].flags.insert(.permissionDenied)
+            node.flags.insert(.permissionDenied)
         }
-        nodes[Int(nodeID)].children = []
-        nodes[Int(nodeID)].scanState = .failed
+        node.children = []
+        node.scanState = .failed
+        return node
     }
 
-    private mutating func markMetadataReadFailure(nodeID: NodeID, issue: ScanIssue) {
+    private func metadataReadFailureNode(_ node: FileNode, issue: ScanIssue) -> FileNode {
+        var node = node
         if issue.kind == .permissionDenied {
-            nodes[Int(nodeID)].flags.insert(.permissionDenied)
+            node.flags.insert(.permissionDenied)
         }
-        nodes[Int(nodeID)].children = []
-        nodes[Int(nodeID)].scanState = .failed
+        node.children = []
+        node.scanState = .failed
+        return node
     }
 
     private mutating func resourceValues(for url: URL) -> ResourceRead {
@@ -367,9 +478,15 @@ private struct FileTreeBuilder {
             )
         } catch {
             let issue = scanIssue(url: url, error: error)
-            issues.append(issue)
+            receive(.issue(issue))
             return ResourceRead(values: nil, issue: issue)
         }
+    }
+
+    private mutating func nextNodeID() -> NodeID {
+        let id = nextID
+        nextID += 1
+        return id
     }
 
     private func scanIssue(url: URL, error: Error) -> ScanIssue {

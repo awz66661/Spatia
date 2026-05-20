@@ -20,6 +20,47 @@ final class FileScannerTests: XCTestCase {
         XCTAssertTrue(result.issues.isEmpty)
     }
 
+    func testScanEventsCanBeAccumulatedIntoFinalResult() throws {
+        let fixture = try ScannerFixture()
+        defer { try? fixture.tearDown() }
+
+        try fixture.file("alpha.bin", bytes: 4)
+        try fixture.file("nested/beta.bin", bytes: 6)
+
+        var events: [ScanEvent] = []
+        var accumulator = ScanAccumulator()
+        FileScanner().scanEvents(root: fixture.rootURL) { event in
+            events.append(event)
+            accumulator.consume(event)
+        }
+
+        let result = try XCTUnwrap(accumulator.result)
+        let root = try XCTUnwrap(result.snapshot.root)
+
+        XCTAssertEqual(result.summary.fileCount, 2)
+        XCTAssertEqual(result.summary.folderCount, 2)
+        XCTAssertEqual(result.summary.logicalBytes, 10)
+        XCTAssertEqual(root.logicalSize, 10)
+        XCTAssertTrue(events.contains { event in
+            if case let .started(rootURL, _) = event {
+                return rootURL == fixture.rootURL.standardizedFileURL
+            }
+            return false
+        })
+        XCTAssertTrue(events.contains { event in
+            if case let .directoryFinished(node) = event {
+                return node.id == root.id && node.scanState == .complete
+            }
+            return false
+        })
+        XCTAssertTrue(events.contains { event in
+            if case let .finished(summary) = event {
+                return summary.fileCount == 2 && summary.logicalBytes == 10
+            }
+            return false
+        })
+    }
+
     func testCanExcludeHiddenFiles() throws {
         let fixture = try ScannerFixture()
         defer { try? fixture.tearDown() }
