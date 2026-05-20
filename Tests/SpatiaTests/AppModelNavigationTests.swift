@@ -132,7 +132,7 @@ final class AppModelNavigationTests: XCTestCase {
         XCTAssertEqual(model.selectedID, 1)
     }
 
-    func testSidebarBrowseItemsAreSortedByAllocatedSize() async {
+    func testCurrentViewItemsAreSortedByAllocatedSize() async {
         let model = AppModel()
         model.result = ScanResult(
             snapshot: sidebarSnapshot(),
@@ -148,16 +148,19 @@ final class AppModelNavigationTests: XCTestCase {
         )
         model.displayRootID = 0
 
-        await waitForSidebarPanelState(model) {
-            model.sidebarBrowseItems.count == 3
+        await waitForCanvasDerivedState(model) {
+            model.currentViewItems.count == 3
         }
 
-        XCTAssertEqual(model.sidebarBrowseItems.map(\.id), [2, 1, 3])
-        XCTAssertEqual(model.sidebarBrowseItems.map(\.sizeText), [
+        XCTAssertEqual(model.currentViewItems.map(\.id), [2, 1, 3])
+        XCTAssertEqual(model.currentViewItems.map(\.sizeText), [
             ByteCount.string(50),
             ByteCount.string(30),
             ByteCount.string(20)
         ])
+        XCTAssertEqual(model.currentViewSummary?.diskUsage, ByteCount.string(100))
+        XCTAssertEqual(model.currentViewSummary?.fileCount, "1")
+        XCTAssertEqual(model.currentViewSummary?.folderCount, "2")
     }
 
     func testLargestDescendantFileSummariesAreScopedAndSortedByAllocatedSize() async {
@@ -175,27 +178,28 @@ final class AppModelNavigationTests: XCTestCase {
             issues: []
         )
         model.displayRootID = 0
+        model.isInsightsPanelVisible = true
 
-        await waitForSidebarPanelState(model) {
-            model.sidebarLargestFileItems.count == 3
+        await waitForCanvasDerivedState(model) {
+            model.insightLargestFileItems.count == 3
         }
 
-        XCTAssertEqual(model.sidebarLargestFileItems.map(\.id), [5, 4, 3])
-        XCTAssertEqual(model.sidebarLargestFileItems.map(\.relativePath), [
+        XCTAssertEqual(model.insightLargestFileItems.map(\.id), [5, 4, 3])
+        XCTAssertEqual(model.insightLargestFileItems.map(\.relativePath), [
             "large/large.bin",
             "medium/medium.bin",
             "small.txt"
         ])
-        XCTAssertEqual(model.sidebarLargestFileItems.map(\.shareText), ["50%", "30%", "20%"])
+        XCTAssertEqual(model.insightLargestFileItems.map(\.shareText), ["50%", "30%", "20%"])
 
         model.displayRootID = 1
 
-        await waitForSidebarPanelState(model) {
-            model.sidebarLargestFileItems.map(\.id) == [4]
+        await waitForCanvasDerivedState(model) {
+            model.insightLargestFileItems.map(\.id) == [4]
         }
 
-        XCTAssertEqual(model.sidebarLargestFileItems.map(\.id), [4])
-        XCTAssertEqual(model.sidebarLargestFileItems.first?.shareText, "100%")
+        XCTAssertEqual(model.insightLargestFileItems.map(\.id), [4])
+        XCTAssertEqual(model.insightLargestFileItems.first?.shareText, "100%")
     }
 
     func testCategoryUsageSummariesAreScopedToDisplayRoot() async {
@@ -213,14 +217,14 @@ final class AppModelNavigationTests: XCTestCase {
             issues: []
         )
         model.displayRootID = 0
-        model.setSidebarSection(.typeUsage, isExpanded: true)
+        model.isInsightsPanelVisible = true
 
-        await waitForSidebarPanelState(model) {
-            !model.sidebarCategoryUsageItems.isEmpty
+        await waitForCanvasDerivedState(model) {
+            !model.insightCategoryUsageItems.isEmpty
         }
 
-        let rootUsage = Dictionary(uniqueKeysWithValues: model.sidebarCategoryUsageItems.map { ($0.category, $0) })
-        XCTAssertEqual(model.sidebarCategoryUsageItems.reduce(Int64(0)) { $0 + $1.allocatedBytes }, 100)
+        let rootUsage = Dictionary(uniqueKeysWithValues: model.insightCategoryUsageItems.map { ($0.category, $0) })
+        XCTAssertEqual(model.insightCategoryUsageItems.reduce(Int64(0)) { $0 + $1.allocatedBytes }, 100)
         XCTAssertEqual(rootUsage[.other]?.allocatedBytes, 80)
         XCTAssertEqual(rootUsage[.other]?.itemCount, 2)
         XCTAssertEqual(rootUsage[.other]?.shareText, "80%")
@@ -230,15 +234,15 @@ final class AppModelNavigationTests: XCTestCase {
 
         model.displayRootID = 2
 
-        await waitForSidebarPanelState(model) {
-            model.sidebarCategoryUsageItems.first?.allocatedBytes == 50
+        await waitForCanvasDerivedState(model) {
+            model.insightCategoryUsageItems.first?.allocatedBytes == 50
         }
 
-        XCTAssertEqual(model.sidebarCategoryUsageItems.first?.allocatedBytes, 50)
-        XCTAssertEqual(model.sidebarCategoryUsageItems.first?.itemCount, 1)
+        XCTAssertEqual(model.insightCategoryUsageItems.first?.allocatedBytes, 50)
+        XCTAssertEqual(model.insightCategoryUsageItems.first?.itemCount, 1)
     }
 
-    func testSidebarPanelRefreshesWhenSnapshotChanges() async {
+    func testCanvasInsightsRefreshWhenSnapshotChanges() async {
         let model = AppModel()
         model.result = ScanResult(
             snapshot: sidebarSnapshot(),
@@ -253,17 +257,17 @@ final class AppModelNavigationTests: XCTestCase {
             issues: []
         )
         model.displayRootID = 0
+        model.isInsightsPanelVisible = true
 
-        await waitForSidebarPanelState(model) {
-            model.sidebarLargestFileItems.first?.id == 5
+        await waitForCanvasDerivedState(model) {
+            model.insightLargestFileItems.first?.id == 5
         }
-        XCTAssertEqual(model.sidebarLargestFileItems.first?.id, 5)
+        XCTAssertEqual(model.insightLargestFileItems.first?.id, 5)
 
-        model.setSidebarSection(.typeUsage, isExpanded: true)
-        await waitForSidebarPanelState(model) {
-            model.sidebarCategoryUsageItems.first?.allocatedBytes == 80
+        await waitForCanvasDerivedState(model) {
+            model.insightCategoryUsageItems.first?.allocatedBytes == 80
         }
-        XCTAssertEqual(model.sidebarCategoryUsageItems.first?.allocatedBytes, 80)
+        XCTAssertEqual(model.insightCategoryUsageItems.first?.allocatedBytes, 80)
 
         var snapshot = sidebarSnapshot()
         snapshot.nodes[0].logicalSize = 160
@@ -285,15 +289,15 @@ final class AppModelNavigationTests: XCTestCase {
             issues: []
         )
 
-        await waitForSidebarPanelState(model) {
-            model.sidebarLargestFileItems.first?.id == 4
+        await waitForCanvasDerivedState(model) {
+            model.insightLargestFileItems.first?.id == 4
         }
-        XCTAssertEqual(model.sidebarLargestFileItems.first?.id, 4)
+        XCTAssertEqual(model.insightLargestFileItems.first?.id, 4)
 
-        await waitForSidebarPanelState(model) {
-            Dictionary(uniqueKeysWithValues: model.sidebarCategoryUsageItems.map { ($0.category, $0) })[.other]?.allocatedBytes == 140
+        await waitForCanvasDerivedState(model) {
+            Dictionary(uniqueKeysWithValues: model.insightCategoryUsageItems.map { ($0.category, $0) })[.other]?.allocatedBytes == 140
         }
-        let usage = Dictionary(uniqueKeysWithValues: model.sidebarCategoryUsageItems.map { ($0.category, $0) })
+        let usage = Dictionary(uniqueKeysWithValues: model.insightCategoryUsageItems.map { ($0.category, $0) })
         XCTAssertEqual(usage[.other]?.allocatedBytes, 140)
     }
 
@@ -387,6 +391,22 @@ final class AppModelNavigationTests: XCTestCase {
         XCTAssertEqual(model.searchState.query, "small")
     }
 
+    func testSearchPresentationCanBeFocusedAndCleared() {
+        let model = AppModel()
+
+        model.searchQuery = "large"
+        model.focusSearch()
+
+        XCTAssertTrue(model.isSearchPresented)
+        XCTAssertEqual(model.searchQuery, "large")
+
+        model.clearSearch()
+
+        XCTAssertFalse(model.isSearchPresented)
+        XCTAssertEqual(model.searchQuery, "")
+        XCTAssertTrue(model.searchResultSummaries.isEmpty)
+    }
+
     func testStartingScanCancelsPendingSearchWriteback() async {
         let model = AppModel()
         model.result = ScanResult(
@@ -418,7 +438,7 @@ final class AppModelNavigationTests: XCTestCase {
         model.cancelScan()
     }
 
-    func testSidebarPanelOnlyComputesExpandedSections() async {
+    func testCanvasDerivedStateOnlyComputesInsightsWhenDrawerIsVisible() async {
         let model = AppModel()
         model.result = ScanResult(
             snapshot: sidebarSnapshot(),
@@ -434,30 +454,31 @@ final class AppModelNavigationTests: XCTestCase {
         )
         model.displayRootID = 0
 
-        await waitForSidebarPanelState(model) {
-            model.sidebarBrowseItems.count == 3 && model.sidebarLargestFileItems.count == 3
+        await waitForCanvasDerivedState(model) {
+            model.currentViewItems.count == 3
         }
 
-        XCTAssertEqual(model.expandedSidebarSections, [.browse, .largestFiles])
-        XCTAssertEqual(model.sidebarBrowseItems.map(\.id), [2, 1, 3])
-        XCTAssertEqual(model.sidebarLargestFileItems.map(\.id), [5, 4, 3])
-        XCTAssertTrue(model.sidebarCategoryUsageItems.isEmpty)
+        XCTAssertFalse(model.isInsightsPanelVisible)
+        XCTAssertEqual(model.currentViewItems.map(\.id), [2, 1, 3])
+        XCTAssertTrue(model.insightLargestFileItems.isEmpty)
+        XCTAssertTrue(model.insightCategoryUsageItems.isEmpty)
 
-        model.setSidebarSection(.typeUsage, isExpanded: true)
-        await waitForSidebarPanelState(model) {
-            !model.sidebarCategoryUsageItems.isEmpty
+        model.isInsightsPanelVisible = true
+        await waitForCanvasDerivedState(model) {
+            model.insightLargestFileItems.count == 3 && !model.insightCategoryUsageItems.isEmpty
         }
 
-        XCTAssertFalse(model.sidebarCategoryUsageItems.isEmpty)
+        XCTAssertEqual(model.insightLargestFileItems.map(\.id), [5, 4, 3])
+        XCTAssertFalse(model.insightCategoryUsageItems.isEmpty)
 
-        model.setSidebarSection(.largestFiles, isExpanded: false)
-        await waitForSidebarPanelState(model) {
-            model.sidebarLargestFileItems.isEmpty && model.sidebarBrowseItems.count == 3
+        model.isInsightsPanelVisible = false
+        await waitForCanvasDerivedState(model) {
+            model.insightLargestFileItems.isEmpty && model.currentViewItems.count == 3
         }
 
-        XCTAssertFalse(model.expandedSidebarSections.contains(.largestFiles))
-        XCTAssertTrue(model.sidebarLargestFileItems.isEmpty)
-        XCTAssertEqual(model.sidebarBrowseItems.map(\.id), [2, 1, 3])
+        XCTAssertTrue(model.insightLargestFileItems.isEmpty)
+        XCTAssertTrue(model.insightCategoryUsageItems.isEmpty)
+        XCTAssertEqual(model.currentViewItems.map(\.id), [2, 1, 3])
     }
 
     func testSelectedNodeDetailIncludesUsageShares() {
@@ -481,7 +502,7 @@ final class AppModelNavigationTests: XCTestCase {
         XCTAssertEqual(model.selectedNodeDetail?.shareOfScan, "50%")
     }
 
-    func testOpenSidebarItemEntersDirectoriesAndClearsSelection() {
+    func testOpenCurrentViewItemEntersDirectoriesAndClearsSelection() {
         let model = AppModel()
         model.result = ScanResult(
             snapshot: sidebarSnapshot(),
@@ -498,13 +519,13 @@ final class AppModelNavigationTests: XCTestCase {
         model.displayRootID = 0
         model.selectedID = 4
 
-        model.openSidebarItem(1)
+        model.openCurrentViewItem(1)
 
         XCTAssertEqual(model.displayRootID, 1)
         XCTAssertNil(model.selectedID)
     }
 
-    func testOpenSidebarItemSelectsFiles() {
+    func testOpenCurrentViewItemSelectsFiles() {
         let model = AppModel()
         model.result = ScanResult(
             snapshot: sidebarSnapshot(),
@@ -520,7 +541,7 @@ final class AppModelNavigationTests: XCTestCase {
         )
         model.displayRootID = 0
 
-        model.openSidebarItem(3)
+        model.openCurrentViewItem(3)
 
         XCTAssertEqual(model.displayRootID, 0)
         XCTAssertEqual(model.selectedID, 3)
@@ -1364,14 +1385,14 @@ final class AppModelNavigationTests: XCTestCase {
         }
     }
 
-    private func waitForSidebarPanelState(
+    private func waitForCanvasDerivedState(
         _ model: AppModel,
         timeout: TimeInterval = 2,
         condition: @escaping () -> Bool
     ) async {
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
-            if model.sidebarPanelState.loadingSections.isEmpty,
+            if model.canvasDerivedState.loadingScopes.isEmpty,
                condition() {
                 return
             }

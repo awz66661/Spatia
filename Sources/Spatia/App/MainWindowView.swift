@@ -2,14 +2,17 @@ import SpatiaCore
 import SwiftUI
 
 enum DesignTokens {
-    static let sidebarMinWidth: CGFloat = 260
-    static let sidebarIdealWidth: CGFloat = 300
-    static let sidebarMaxWidth: CGFloat = 360
-    static let sidebarIconColumnWidth: CGFloat = 24
-    static let detailMinWidth: CGFloat = 700
+    static let sidebarMinWidth: CGFloat = 210
+    static let sidebarIdealWidth: CGFloat = 235
+    static let sidebarMaxWidth: CGFloat = 280
+    static let rowIconColumnWidth: CGFloat = 24
+    static let detailMinWidth: CGFloat = 760
     static let treemapInset: CGFloat = 16
     static let inspectorCornerRadius: CGFloat = 18
     static let sidebarTitlebarInset: CGFloat = 58
+    static let currentViewStripHeight: CGFloat = 58
+    static let searchOverlayWidth: CGFloat = 430
+    static let insightsDrawerWidth: CGFloat = 330
 
     static var windowBackground: Color {
         Color(nsColor: .textBackgroundColor)
@@ -43,24 +46,6 @@ struct MainWindowView: View {
                 ScanSourceMenu()
             }
 
-            ToolbarItem(placement: .navigation) {
-                Button {
-                    model.goUp()
-                } label: {
-                    Label("Up", systemImage: "chevron.up")
-                }
-                .labelStyle(.iconOnly)
-                .disabled(model.displayRoot?.parentID == nil)
-                .help("Up")
-            }
-
-            ToolbarItem(placement: .principal) {
-                BreadcrumbPathBar(nodes: model.breadcrumb) { nodeID in
-                    model.navigateToBreadcrumb(nodeID)
-                }
-                .frame(maxWidth: 560)
-            }
-
             ToolbarItem(placement: .primaryAction) {
                 Button {
                     model.rescanCurrentSource()
@@ -85,9 +70,32 @@ struct MainWindowView: View {
             }
 
             ToolbarItem(placement: .primaryAction) {
+                Button {
+                    model.isInsightsPanelVisible.toggle()
+                } label: {
+                    Label("Insights", systemImage: model.isInsightsPanelVisible ? "chart.pie.fill" : "chart.pie")
+                }
+                .labelStyle(.iconOnly)
+                .disabled(model.snapshot == nil)
+                .help(model.isInsightsPanelVisible ? "Hide Insights" : "Show Insights")
+            }
+
+            ToolbarItem(placement: .primaryAction) {
                 StatusPill(text: model.statusText, isScanning: model.isScanning)
             }
         }
+        .searchable(
+            text: Binding(
+                get: { model.searchQuery },
+                set: { model.searchQuery = $0 }
+            ),
+            isPresented: Binding(
+                get: { model.isSearchPresented },
+                set: { model.isSearchPresented = $0 }
+            ),
+            placement: .toolbar,
+            prompt: "Name, path, kind, or category"
+        )
     }
 }
 
@@ -97,61 +105,86 @@ private struct TreemapDetailView: View {
     var body: some View {
         Group {
             if let snapshot = model.snapshot, let rootID = model.displayRoot?.id {
-                TreemapCanvas(
-                    snapshot: snapshot,
-                    rootID: rootID,
-                    expandedNodeIDs: model.expandedTreemapNodeIDs,
-                    highlightedNodeIDs: model.selectedPathNodeIDs,
-                    selectedID: Binding(
-                        get: { model.selectedID },
-                        set: { model.select($0) }
-                    ),
-                    onActivate: { nodeID in
-                        model.enterDirectory(nodeID)
-                    },
-                    onPreview: { nodeID in
-                        model.quickLook(nodeID)
-                    },
-                    onExpandPackage: { nodeID in
-                        model.select(nodeID)
-                        Task {
-                            await model.expandSelectedPackage()
+                VStack(spacing: 0) {
+                    CanvasNavigationBar()
+                    CurrentViewStrip()
+
+                    ZStack(alignment: .topLeading) {
+                        TreemapCanvas(
+                            snapshot: snapshot,
+                            rootID: rootID,
+                            expandedNodeIDs: model.expandedTreemapNodeIDs,
+                            highlightedNodeIDs: model.selectedPathNodeIDs,
+                            selectedID: Binding(
+                                get: { model.selectedID },
+                                set: { model.select($0) }
+                            ),
+                            onActivate: { nodeID in
+                                model.enterDirectory(nodeID)
+                            },
+                            onPreview: { nodeID in
+                                model.quickLook(nodeID)
+                            },
+                            onExpandPackage: { nodeID in
+                                model.select(nodeID)
+                                Task {
+                                    await model.expandSelectedPackage()
+                                }
+                            },
+                            onReveal: { nodeID in
+                                model.select(nodeID)
+                                model.revealSelectedInFinder()
+                            },
+                            onCopyPath: { nodeID in
+                                model.select(nodeID)
+                                model.copySelectedPath()
+                            },
+                            onMoveToTrash: { nodeID in
+                                model.select(nodeID)
+                                Task {
+                                    await model.moveSelectedItemToTrash()
+                                }
+                            },
+                            onHover: { nodeID in
+                                model.hoverTreemapNode(nodeID)
+                            },
+                            onSyntheticOtherSelect: { size in
+                                model.selectSyntheticOther(size: size)
+                            }
+                        )
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .padding(DesignTokens.treemapInset)
+
+                        if !model.searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            SearchResultsOverlay()
+                                .padding(.leading, 18)
+                                .padding(.top, 12)
                         }
-                    },
-                    onReveal: { nodeID in
-                        model.select(nodeID)
-                        model.revealSelectedInFinder()
-                    },
-                    onCopyPath: { nodeID in
-                        model.select(nodeID)
-                        model.copySelectedPath()
-                    },
-                    onMoveToTrash: { nodeID in
-                        model.select(nodeID)
-                        Task {
-                            await model.moveSelectedItemToTrash()
+
+                        if model.isInsightsPanelVisible {
+                            HStack {
+                                Spacer(minLength: 0)
+                                InsightsDrawerView()
+                                    .padding(.trailing, 18)
+                                    .padding(.top, 12)
+                            }
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                            .transition(.move(edge: .trailing).combined(with: .opacity))
                         }
-                    },
-                    onHover: { nodeID in
-                        model.hoverTreemapNode(nodeID)
-                    },
-                    onSyntheticOtherSelect: { size in
-                        model.selectSyntheticOther(size: size)
                     }
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .padding(DesignTokens.treemapInset)
-                .safeAreaInset(edge: .bottom, spacing: 0) {
-                    if let detail = model.selectedNodeDetail {
-                        SelectionDetailPanel(detail: detail)
-                            .padding(.horizontal, 18)
-                            .padding(.top, 8)
-                            .padding(.bottom, 16)
-                    } else if let detail = model.selectedOtherDetail {
-                        OtherSmallFilesDetailPanel(detail: detail)
-                            .padding(.horizontal, 18)
-                            .padding(.top, 8)
-                            .padding(.bottom, 16)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .safeAreaInset(edge: .bottom, spacing: 0) {
+                        if let detail = model.selectedNodeDetail {
+                            SelectionDetailPanel(detail: detail)
+                                .padding(.horizontal, 18)
+                                .padding(.top, 8)
+                                .padding(.bottom, 16)
+                        } else if let detail = model.selectedOtherDetail {
+                            OtherSmallFilesDetailPanel(detail: detail)
+                                .padding(.horizontal, 18)
+                                .padding(.top, 8)
+                                .padding(.bottom, 16)
+                        }
                     }
                 }
             } else {

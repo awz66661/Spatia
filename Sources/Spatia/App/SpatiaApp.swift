@@ -33,6 +33,19 @@ struct SpatiaApp: App {
                 .disabled(!model.isScanning)
             }
 
+            CommandMenu("Find") {
+                Button("Find") {
+                    model.focusSearch()
+                }
+                .keyboardShortcut("f", modifiers: [.command])
+
+                Button("Clear Search") {
+                    model.clearSearch()
+                }
+                .keyboardShortcut(.escape, modifiers: [])
+                .disabled(model.searchQuery.isEmpty)
+            }
+
             CommandMenu("Item") {
                 Button("Enter Selected Item") {
                     model.enterSelectedDirectory()

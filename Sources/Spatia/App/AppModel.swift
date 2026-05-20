@@ -6,7 +6,7 @@ import SwiftUI
 final class AppModel: ObservableObject {
     @Published var result: ScanResult? {
         didSet {
-            scheduleSidebarDerivedRefresh(force: true)
+            scheduleCanvasDerivedRefresh(force: true)
             scheduleSearchRefresh(debounce: false)
         }
     }
@@ -14,7 +14,7 @@ final class AppModel: ObservableObject {
     @Published var selectedID: NodeID?
     @Published var displayRootID: NodeID? {
         didSet {
-            scheduleSidebarDerivedRefresh(force: true)
+            scheduleCanvasDerivedRefresh(force: true)
             scheduleSearchRefresh(debounce: false)
         }
     }
@@ -23,15 +23,13 @@ final class AppModel: ObservableObject {
     @Published var statusText = "Choose a folder to scan."
     @Published var currentScanURL: URL?
     @Published var scanPreferences = ScanPreferences()
-    @Published var expandedSidebarSections: Set<SidebarSection> = Set([.browse, .largestFiles]) {
+    @Published var isInsightsPanelVisible = false {
         didSet {
-            let lazyDerivedSections: Set<SidebarSection> = [.largestFiles, .typeUsage]
-            guard oldValue.intersection(lazyDerivedSections) != expandedSidebarSections.intersection(lazyDerivedSections) else {
-                return
-            }
-            scheduleSidebarDerivedRefresh(force: true)
+            guard oldValue != isInsightsPanelVisible else { return }
+            scheduleCanvasDerivedRefresh(force: true)
         }
     }
+    @Published var isSearchPresented = false
 
     @Published var searchQuery = "" {
         didSet {
@@ -39,11 +37,11 @@ final class AppModel: ObservableObject {
         }
     }
 
-    @Published private(set) var sidebarPanelState = SidebarPanelState.empty
+    @Published private(set) var canvasDerivedState = CanvasDerivedState.empty
     @Published private(set) var searchState = SearchState.empty(query: "")
     @Published private var partialScanSnapshot: FileTreeSnapshot? {
         didSet {
-            scheduleSidebarDerivedRefresh(force: false)
+            scheduleCanvasDerivedRefresh(force: false)
             scheduleSearchRefresh(debounce: false)
         }
     }
@@ -153,16 +151,20 @@ final class AppModel: ObservableObject {
         )
     }
 
-    var sidebarBrowseItems: [SidebarItemSummary] {
-        sidebarPanelState.browseItems
+    var currentViewSummary: CanvasViewSummary? {
+        canvasDerivedState.currentViewSummary
     }
 
-    var sidebarLargestFileItems: [DescendantFileSummary] {
-        sidebarPanelState.largestFileItems
+    var currentViewItems: [CurrentViewItemSummary] {
+        canvasDerivedState.currentViewItems
     }
 
-    var sidebarCategoryUsageItems: [CategoryUsageSummary] {
-        sidebarPanelState.categoryUsageItems
+    var insightLargestFileItems: [DescendantFileSummary] {
+        canvasDerivedState.largestFileItems
+    }
+
+    var insightCategoryUsageItems: [CategoryUsageSummary] {
+        canvasDerivedState.categoryUsageItems
     }
 
     var searchResultSummaries: [SearchResultSummary] {
@@ -448,7 +450,7 @@ final class AppModel: ObservableObject {
         expandedTreemapNodeIDsStorage = []
     }
 
-    func openSidebarItem(_ id: NodeID) {
+    func openCurrentViewItem(_ id: NodeID) {
         guard let node = snapshot?[id], id != syntheticOtherNodeID else { return }
         if isNavigableContainer(node) {
             enterDirectory(id)
@@ -460,6 +462,15 @@ final class AppModel: ObservableObject {
     func openInsightItem(_ id: NodeID) {
         guard id != syntheticOtherNodeID, snapshot?[id] != nil else { return }
         select(id)
+    }
+
+    func focusSearch() {
+        isSearchPresented = true
+    }
+
+    func clearSearch() {
+        searchQuery = ""
+        isSearchPresented = false
     }
 
     func hoverTreemapNode(_ id: NodeID?) {
@@ -606,27 +617,15 @@ final class AppModel: ObservableObject {
         expandedTreemapNodeIDsStorage = []
     }
 
-    func toggleSidebarSection(_ section: SidebarSection) {
-        setSidebarSection(section, isExpanded: !expandedSidebarSections.contains(section))
+    func isCanvasScopeLoading(_ scope: CanvasDerivedScope) -> Bool {
+        canvasDerivedState.loadingScopes.contains(scope)
     }
 
-    func setSidebarSection(_ section: SidebarSection, isExpanded: Bool) {
-        if isExpanded {
-            expandedSidebarSections.insert(section)
-        } else {
-            expandedSidebarSections.remove(section)
-        }
-    }
-
-    func isSidebarSectionLoading(_ section: SidebarSection) -> Bool {
-        sidebarPanelState.loadingSections.contains(section)
-    }
-
-    private func scheduleSidebarDerivedRefresh(force: Bool) {
+    private func scheduleCanvasDerivedRefresh(force: Bool) {
         guard let snapshot, let displayRoot else {
             activeDerivedTask?.cancel()
             activeDerivedTask = nil
-            sidebarPanelState = .empty
+            canvasDerivedState = .empty
             return
         }
 
@@ -638,24 +637,24 @@ final class AppModel: ObservableObject {
 
         activeDerivedTask?.cancel()
         let key = SnapshotDerivedKey(snapshot: snapshot, displayRootID: displayRoot.id)
-        let sections = sidebarSectionsToBuild()
+        let scopes = canvasScopesToBuild()
         derivedGeneration += 1
         let generation = derivedGeneration
-        sidebarPanelState = .loading(sections: sections)
+        canvasDerivedState = .loading(scopes: scopes)
 
-        activeDerivedTask = Task { [snapshot, displayRoot, sections, key, generation] in
+        activeDerivedTask = Task { [snapshot, displayRoot, scopes, key, generation] in
             let state = await Task.detached(priority: .utility) {
-                SidebarDerivedBuilder.build(sections: sections, snapshot: snapshot, displayRoot: displayRoot)
+                CanvasDerivedBuilder.build(scopes: scopes, snapshot: snapshot, displayRoot: displayRoot)
             }.value
 
             guard !Task.isCancelled,
                   generation == derivedGeneration,
-                  sections == sidebarSectionsToBuild(),
+                  scopes == canvasScopesToBuild(),
                   currentSnapshotDerivedKey() == key else {
                 return
             }
 
-            sidebarPanelState = state
+            canvasDerivedState = state
             activeDerivedTask = nil
         }
     }
@@ -713,20 +712,18 @@ final class AppModel: ObservableObject {
         derivedGeneration += 1
         searchGeneration += 1
         searchIndexCache = nil
-        sidebarPanelState = .empty
+        canvasDerivedState = .empty
         searchState = .empty(query: searchQuery)
         lastProgressiveDerivedRefresh = Date.distantPast
     }
 
-    private func sidebarSectionsToBuild() -> Set<SidebarSection> {
-        var sections: Set<SidebarSection> = [.browse]
-        if expandedSidebarSections.contains(.largestFiles) {
-            sections.insert(.largestFiles)
+    private func canvasScopesToBuild() -> Set<CanvasDerivedScope> {
+        var scopes: Set<CanvasDerivedScope> = [.currentView]
+        if isInsightsPanelVisible {
+            scopes.insert(.largestFiles)
+            scopes.insert(.typeUsage)
         }
-        if expandedSidebarSections.contains(.typeUsage) {
-            sections.insert(.typeUsage)
-        }
-        return sections
+        return scopes
     }
 
     private func currentSnapshotDerivedKey() -> SnapshotDerivedKey? {
@@ -989,30 +986,32 @@ private struct SearchBuildOutput: Sendable {
     var results: [SearchResultSummary]
 }
 
-private enum SidebarDerivedBuilder {
+private enum CanvasDerivedBuilder {
     static func build(
-        sections: Set<SidebarSection>,
+        scopes: Set<CanvasDerivedScope>,
         snapshot: FileTreeSnapshot,
         displayRoot: FileNode
-    ) -> SidebarPanelState {
-        SidebarPanelState(
-            browseItems: buildBrowseItems(snapshot: snapshot, displayRoot: displayRoot),
-            largestFileItems: sections.contains(.largestFiles)
+    ) -> CanvasDerivedState {
+        let currentView = buildCurrentView(snapshot: snapshot, displayRoot: displayRoot)
+        return CanvasDerivedState(
+            currentViewSummary: currentView.summary,
+            currentViewItems: currentView.items,
+            largestFileItems: scopes.contains(.largestFiles)
                 ? buildLargestDescendantFileSummaries(snapshot: snapshot, displayRoot: displayRoot)
                 : [],
-            categoryUsageItems: sections.contains(.typeUsage)
+            categoryUsageItems: scopes.contains(.typeUsage)
                 ? buildCategoryUsageSummaries(snapshot: snapshot, displayRoot: displayRoot)
                 : [],
-            loadingSections: [],
+            loadingScopes: [],
             errors: [:]
         )
     }
 
-    private static func buildBrowseItems(
+    private static func buildCurrentView(
         snapshot: FileTreeSnapshot,
         displayRoot: FileNode
-    ) -> [SidebarItemSummary] {
-        snapshot.children(of: displayRoot.id)
+    ) -> (summary: CanvasViewSummary, items: [CurrentViewItemSummary]) {
+        let children = snapshot.children(of: displayRoot.id)
             .filter { $0.allocatedSize > 0 }
             .sorted { lhs, rhs in
                 if lhs.allocatedSize == rhs.allocatedSize {
@@ -1020,16 +1019,27 @@ private enum SidebarDerivedBuilder {
                 }
                 return lhs.allocatedSize > rhs.allocatedSize
             }
-            .map { node in
-                SidebarItemSummary(
-                    id: node.id,
-                    name: DerivedFormatting.displayName(for: node),
-                    kind: DerivedFormatting.displayName(for: node.kind),
-                    sizeText: ByteCount.string(node.allocatedSize),
-                    path: node.url?.path,
-                    isContainer: isNavigableContainer(node)
-                )
-            }
+
+        let folderCount = children.filter { $0.kind == .directory || $0.kind == .package }.count
+        let fileCount = children.count - folderCount
+        let summary = CanvasViewSummary(
+            name: DerivedFormatting.displayName(for: displayRoot),
+            diskUsage: ByteCount.string(displayRoot.allocatedSize),
+            fileCount: "\(fileCount)",
+            folderCount: "\(folderCount)",
+            path: displayRoot.url?.path
+        )
+        let items = children.map { node in
+            CurrentViewItemSummary(
+                id: node.id,
+                name: DerivedFormatting.displayName(for: node),
+                kind: DerivedFormatting.displayName(for: node.kind),
+                sizeText: ByteCount.string(node.allocatedSize),
+                path: node.url?.path,
+                isContainer: isNavigableContainer(node)
+            )
+        }
+        return (summary, items)
     }
 
     private static func buildLargestDescendantFileSummaries(
@@ -1174,27 +1184,30 @@ private enum DerivedFormatting {
     }
 }
 
-struct SidebarPanelState: Hashable, Sendable {
-    var browseItems: [SidebarItemSummary]
+struct CanvasDerivedState: Hashable, Sendable {
+    var currentViewSummary: CanvasViewSummary?
+    var currentViewItems: [CurrentViewItemSummary]
     var largestFileItems: [DescendantFileSummary]
     var categoryUsageItems: [CategoryUsageSummary]
-    var loadingSections: Set<SidebarSection>
-    var errors: [SidebarSection: String]
+    var loadingScopes: Set<CanvasDerivedScope>
+    var errors: [CanvasDerivedScope: String]
 
-    static let empty = SidebarPanelState(
-        browseItems: [],
+    static let empty = CanvasDerivedState(
+        currentViewSummary: nil,
+        currentViewItems: [],
         largestFileItems: [],
         categoryUsageItems: [],
-        loadingSections: [],
+        loadingScopes: [],
         errors: [:]
     )
 
-    static func loading(sections: Set<SidebarSection>) -> SidebarPanelState {
-        SidebarPanelState(
-            browseItems: [],
+    static func loading(scopes: Set<CanvasDerivedScope>) -> CanvasDerivedState {
+        CanvasDerivedState(
+            currentViewSummary: nil,
+            currentViewItems: [],
             largestFileItems: [],
             categoryUsageItems: [],
-            loadingSections: sections,
+            loadingScopes: scopes,
             errors: [:]
         )
     }
@@ -1285,11 +1298,10 @@ struct ScanProgress: Hashable, Sendable {
     }
 }
 
-enum SidebarSection: String, CaseIterable, Hashable, Identifiable, Sendable {
-    case browse
+enum CanvasDerivedScope: String, CaseIterable, Hashable, Identifiable, Sendable {
+    case currentView
     case largestFiles
     case typeUsage
-    case access
 
     var id: Self { self }
 }
@@ -1318,7 +1330,15 @@ struct OtherSmallFilesDetail: Hashable {
     var displayRootName: String?
 }
 
-struct SidebarItemSummary: Identifiable, Hashable, Sendable {
+struct CanvasViewSummary: Hashable, Sendable {
+    var name: String
+    var diskUsage: String
+    var fileCount: String
+    var folderCount: String
+    var path: String?
+}
+
+struct CurrentViewItemSummary: Identifiable, Hashable, Sendable {
     var id: NodeID
     var name: String
     var kind: String
