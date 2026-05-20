@@ -33,6 +33,7 @@ final class AppModel: ObservableObject {
 
     private var scanTask: Task<Void, Never>?
     private var scanCancellationSource: ScanCancellationSource?
+    private var sidebarInsightCache: SidebarInsightCache?
     private let pathRiskPolicy = PathRiskPolicy()
     private let safetyPolicy = SafetyPolicy()
 
@@ -105,65 +106,15 @@ final class AppModel: ObservableObject {
     }
 
     var largestDisplayRootChildren: [DisplayRootChildSummary] {
-        guard let snapshot, let displayRoot else { return [] }
-
-        return snapshot.children(of: displayRoot.id)
-            .filter { $0.allocatedSize > 0 }
-            .sorted { lhs, rhs in
-                if lhs.allocatedSize == rhs.allocatedSize {
-                    return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
-                }
-                return lhs.allocatedSize > rhs.allocatedSize
-            }
-            .prefix(8)
-            .map { node in
-                DisplayRootChildSummary(
-                    id: node.id,
-                    name: displayName(for: node),
-                    kind: displayName(for: node.kind),
-                    sizeText: ByteCount.string(node.allocatedSize),
-                    path: node.url?.path,
-                    isContainer: isNavigableContainer(node)
-                )
-            }
+        cachedSidebarInsights()?.largestDisplayRootChildren ?? []
     }
 
     var largestDescendantFileSummaries: [DescendantFileSummary] {
-        guard let snapshot, let displayRoot else { return [] }
-
-        return snapshot.largestDescendantFiles(rootedAt: displayRoot.id, limit: 16)
-            .compactMap { usage in
-                guard let node = snapshot[usage.nodeID] else { return nil }
-                return DescendantFileSummary(
-                    id: node.id,
-                    name: displayName(for: node),
-                    relativePath: snapshot.relativePath(from: displayRoot.id, to: node.id) ?? displayName(for: node),
-                    category: FileCategoryClassifier.category(for: node),
-                    categoryName: displayName(for: FileCategoryClassifier.category(for: node)),
-                    sizeText: ByteCount.string(usage.allocatedBytes),
-                    shareText: percentageString(usage.shareOfRoot),
-                    shareOfCurrentRoot: usage.shareOfRoot,
-                    path: node.url?.path
-                )
-            }
+        cachedSidebarInsights()?.largestDescendantFileSummaries ?? []
     }
 
     var categoryUsageSummaries: [CategoryUsageSummary] {
-        guard let snapshot, let displayRoot else { return [] }
-
-        return snapshot.categoryUsage(rootedAt: displayRoot.id)
-            .map { usage in
-                CategoryUsageSummary(
-                    category: usage.category,
-                    name: displayName(for: usage.category),
-                    sizeText: ByteCount.string(usage.allocatedBytes),
-                    itemCountText: "\(usage.itemCount)",
-                    shareText: percentageString(usage.shareOfRoot),
-                    allocatedBytes: usage.allocatedBytes,
-                    itemCount: usage.itemCount,
-                    shareOfCurrentRoot: usage.shareOfRoot
-                )
-            }
+        cachedSidebarInsights()?.categoryUsageSummaries ?? []
     }
 
     var searchResultSummaries: [SearchResultSummary] {
@@ -581,6 +532,90 @@ final class AppModel: ObservableObject {
         expandedTreemapNodeIDsStorage = []
     }
 
+    private func cachedSidebarInsights() -> SidebarInsightCache? {
+        guard let snapshot, let displayRoot else { return nil }
+
+        let key = SidebarInsightCacheKey(snapshot: snapshot, displayRootID: displayRoot.id)
+        if let sidebarInsightCache, sidebarInsightCache.key == key {
+            return sidebarInsightCache
+        }
+
+        let cache = SidebarInsightCache(
+            key: key,
+            largestDisplayRootChildren: buildLargestDisplayRootChildren(snapshot: snapshot, displayRoot: displayRoot),
+            largestDescendantFileSummaries: buildLargestDescendantFileSummaries(snapshot: snapshot, displayRoot: displayRoot),
+            categoryUsageSummaries: buildCategoryUsageSummaries(snapshot: snapshot, displayRoot: displayRoot)
+        )
+        sidebarInsightCache = cache
+        return cache
+    }
+
+    private func buildLargestDisplayRootChildren(
+        snapshot: FileTreeSnapshot,
+        displayRoot: FileNode
+    ) -> [DisplayRootChildSummary] {
+        snapshot.children(of: displayRoot.id)
+            .filter { $0.allocatedSize > 0 }
+            .sorted { lhs, rhs in
+                if lhs.allocatedSize == rhs.allocatedSize {
+                    return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
+                }
+                return lhs.allocatedSize > rhs.allocatedSize
+            }
+            .prefix(8)
+            .map { node in
+                DisplayRootChildSummary(
+                    id: node.id,
+                    name: displayName(for: node),
+                    kind: displayName(for: node.kind),
+                    sizeText: ByteCount.string(node.allocatedSize),
+                    path: node.url?.path,
+                    isContainer: isNavigableContainer(node)
+                )
+            }
+    }
+
+    private func buildLargestDescendantFileSummaries(
+        snapshot: FileTreeSnapshot,
+        displayRoot: FileNode
+    ) -> [DescendantFileSummary] {
+        snapshot.largestDescendantFiles(rootedAt: displayRoot.id, limit: 16)
+            .compactMap { usage in
+                guard let node = snapshot[usage.nodeID] else { return nil }
+                let category = FileCategoryClassifier.category(for: node)
+                return DescendantFileSummary(
+                    id: node.id,
+                    name: displayName(for: node),
+                    relativePath: snapshot.relativePath(from: displayRoot.id, to: node.id) ?? displayName(for: node),
+                    category: category,
+                    categoryName: displayName(for: category),
+                    sizeText: ByteCount.string(usage.allocatedBytes),
+                    shareText: percentageString(usage.shareOfRoot),
+                    shareOfCurrentRoot: usage.shareOfRoot,
+                    path: node.url?.path
+                )
+            }
+    }
+
+    private func buildCategoryUsageSummaries(
+        snapshot: FileTreeSnapshot,
+        displayRoot: FileNode
+    ) -> [CategoryUsageSummary] {
+        snapshot.categoryUsage(rootedAt: displayRoot.id)
+            .map { usage in
+                CategoryUsageSummary(
+                    category: usage.category,
+                    name: displayName(for: usage.category),
+                    sizeText: ByteCount.string(usage.allocatedBytes),
+                    itemCountText: "\(usage.itemCount)",
+                    shareText: percentageString(usage.shareOfRoot),
+                    allocatedBytes: usage.allocatedBytes,
+                    itemCount: usage.itemCount,
+                    shareOfCurrentRoot: usage.shareOfRoot
+                )
+            }
+    }
+
     private func expansionPathNodeIDs(for id: NodeID) -> Set<NodeID> {
         guard let snapshot, let displayRoot, let selectedNode = snapshot[id] else { return [] }
 
@@ -800,6 +835,37 @@ final class AppModel: ObservableObject {
             return "Other"
         }
     }
+}
+
+private struct SidebarInsightCacheKey: Hashable {
+    var snapshotRootID: NodeID
+    var displayRootID: NodeID
+    var nodeCount: Int
+    var nodeStorageAddress: UInt
+    var rootLogicalSize: Int64
+    var rootAllocatedSize: Int64
+    var displayRootLogicalSize: Int64
+    var displayRootAllocatedSize: Int64
+
+    init(snapshot: FileTreeSnapshot, displayRootID: NodeID) {
+        self.snapshotRootID = snapshot.rootID
+        self.displayRootID = displayRootID
+        self.nodeCount = snapshot.nodes.count
+        self.nodeStorageAddress = snapshot.nodes.withUnsafeBufferPointer { buffer in
+            buffer.baseAddress.map { UInt(bitPattern: $0) } ?? 0
+        }
+        self.rootLogicalSize = snapshot.root?.logicalSize ?? 0
+        self.rootAllocatedSize = snapshot.root?.allocatedSize ?? 0
+        self.displayRootLogicalSize = snapshot[displayRootID]?.logicalSize ?? 0
+        self.displayRootAllocatedSize = snapshot[displayRootID]?.allocatedSize ?? 0
+    }
+}
+
+private struct SidebarInsightCache {
+    var key: SidebarInsightCacheKey
+    var largestDisplayRootChildren: [DisplayRootChildSummary]
+    var largestDescendantFileSummaries: [DescendantFileSummary]
+    var categoryUsageSummaries: [CategoryUsageSummary]
 }
 
 struct ScanOverview: Hashable {

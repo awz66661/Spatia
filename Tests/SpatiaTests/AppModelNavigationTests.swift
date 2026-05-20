@@ -217,6 +217,50 @@ final class AppModelNavigationTests: XCTestCase {
         XCTAssertEqual(model.categoryUsageSummaries.first?.itemCount, 1)
     }
 
+    func testSidebarInsightsRefreshWhenSnapshotChanges() {
+        let model = AppModel()
+        model.result = ScanResult(
+            snapshot: sidebarSnapshot(),
+            summary: ScanSummary(
+                rootURL: URL(fileURLWithPath: "/tmp/root", isDirectory: true),
+                fileCount: 2,
+                folderCount: 3,
+                logicalBytes: 100,
+                allocatedBytes: 100,
+                duration: 1
+            ),
+            issues: []
+        )
+        model.displayRootID = 0
+
+        XCTAssertEqual(model.largestDescendantFileSummaries.first?.id, 5)
+        XCTAssertEqual(model.categoryUsageSummaries.first?.allocatedBytes, 80)
+
+        var snapshot = sidebarSnapshot()
+        snapshot.nodes[0].logicalSize = 160
+        snapshot.nodes[0].allocatedSize = 160
+        snapshot.nodes[1].logicalSize = 90
+        snapshot.nodes[1].allocatedSize = 90
+        snapshot.nodes[4].logicalSize = 90
+        snapshot.nodes[4].allocatedSize = 90
+        model.result = ScanResult(
+            snapshot: snapshot,
+            summary: ScanSummary(
+                rootURL: URL(fileURLWithPath: "/tmp/root", isDirectory: true),
+                fileCount: 2,
+                folderCount: 3,
+                logicalBytes: 160,
+                allocatedBytes: 160,
+                duration: 1
+            ),
+            issues: []
+        )
+
+        XCTAssertEqual(model.largestDescendantFileSummaries.first?.id, 4)
+        let usage = Dictionary(uniqueKeysWithValues: model.categoryUsageSummaries.map { ($0.category, $0) })
+        XCTAssertEqual(usage[.other]?.allocatedBytes, 140)
+    }
+
     func testOpenInsightItemSelectsDeepNodeAndExpandsParentPathWithoutEnteringDirectory() {
         let model = AppModel()
         model.result = ScanResult(
