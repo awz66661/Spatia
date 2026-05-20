@@ -288,7 +288,7 @@ private struct FileScanEngine {
             flags.insert(.permissionDenied)
         }
 
-        if pathRiskPolicy.isScannerProtected(url: url, flags: flags) {
+        if pathRiskPolicy.isProtectedSystemPath(url: url) {
             flags.insert(.systemProtected)
         }
 
@@ -521,7 +521,7 @@ private struct FileScanEngine {
             flags.insert(.hidden)
         }
         if values?.isSystemImmutable == true || values?.isUserImmutable == true {
-            flags.insert(.systemProtected)
+            flags.insert(.immutable)
         }
         if values?.mayShareFileContent == true || values?.isSparse == true {
             flags.insert(.possiblySharedAPFSBlocks)

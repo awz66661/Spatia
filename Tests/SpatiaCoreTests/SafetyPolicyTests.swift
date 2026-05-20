@@ -66,6 +66,18 @@ final class SafetyPolicyTests: XCTestCase {
         XCTAssertEqual(decision, .allowed)
     }
 
+    func testBlocksImmutableFiles() {
+        let decision = policy().trashDecision(
+            for: home.appendingPathComponent("Downloads/locked.dat"),
+            name: "locked.dat",
+            kind: .file,
+            flags: [.immutable]
+        )
+
+        XCTAssertTrue(decision.isBlocked)
+        XCTAssertTrue(decision.blockedReason?.contains("immutable") == true)
+    }
+
     func testBlocksApplicationBundlesInApplications() {
         let decision = policy().trashDecision(
             for: URL(fileURLWithPath: "/Applications/Example.app", isDirectory: true),

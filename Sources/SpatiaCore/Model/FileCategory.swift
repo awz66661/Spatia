@@ -32,7 +32,6 @@ public enum FileCategoryClassifier {
         flags: NodeFlags = []
     ) -> FileCategory {
         let url = path.map { URL(fileURLWithPath: $0, isDirectory: kind == .directory || kind == .package) }
-        let pathRiskPolicy = PathRiskPolicy()
 
         if pathRiskPolicy.isSystemCategory(url: url, flags: flags) {
             return .system
@@ -115,4 +114,6 @@ public enum FileCategoryClassifier {
     private static let documentExtensions: Set<String> = [
         "csv", "doc", "docx", "key", "md", "numbers", "pages", "pdf", "ppt", "pptx", "rtf", "txt", "xls", "xlsx"
     ]
+
+    private static let pathRiskPolicy = PathRiskPolicy()
 }

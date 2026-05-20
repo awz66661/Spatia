@@ -80,8 +80,13 @@ final class AppModel: ObservableObject {
     private var searchIndexCache: SearchIndexCache?
     private var hoveredTreemapNodeID: NodeID?
     private var hoverStatusRestoreText: String?
-    private let pathRiskPolicy = PathRiskPolicy()
-    private let safetyPolicy = SafetyPolicy()
+    private let pathRiskPolicy: PathRiskPolicy
+    private let safetyPolicy: SafetyPolicy
+
+    init(pathRiskPolicy: PathRiskPolicy = PathRiskPolicy()) {
+        self.pathRiskPolicy = pathRiskPolicy
+        self.safetyPolicy = SafetyPolicy(pathRiskPolicy: pathRiskPolicy)
+    }
 
     var snapshot: FileTreeSnapshot? {
         result?.snapshot ?? partialScanSnapshot

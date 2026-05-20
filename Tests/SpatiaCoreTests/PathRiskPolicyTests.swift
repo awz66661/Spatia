@@ -39,4 +39,15 @@ final class PathRiskPolicyTests: XCTestCase {
             .userCache
         )
     }
+
+    func testImmutableFlagIsSeparateFromSystemCategory() {
+        let policy = PathRiskPolicy(homeDirectory: home)
+        let url = home.appendingPathComponent("Downloads/locked.dat")
+
+        XCTAssertFalse(policy.isSystemCategory(url: url, flags: [.immutable]))
+        XCTAssertEqual(
+            policy.risk(url: url, name: "locked.dat", kind: .file, flags: [.immutable]).classification,
+            .immutable
+        )
+    }
 }

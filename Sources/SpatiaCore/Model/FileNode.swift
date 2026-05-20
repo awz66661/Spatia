@@ -69,6 +69,7 @@ public struct NodeFlags: OptionSet, Hashable, Sendable {
     public static let possiblySharedAPFSBlocks = NodeFlags(rawValue: 1 << 3)
     public static let iCloudPlaceholder = NodeFlags(rawValue: 1 << 4)
     public static let purgeable = NodeFlags(rawValue: 1 << 5)
+    public static let immutable = NodeFlags(rawValue: 1 << 6)
 }
 
 public enum ScanState: String, Hashable, Sendable {

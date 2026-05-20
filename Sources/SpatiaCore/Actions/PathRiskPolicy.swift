@@ -41,12 +41,16 @@ public struct PathRiskPolicy: Sendable {
             return PathRisk(classification: .homeRoot)
         }
 
-        if isSystemProtected(path) || flags.contains(.systemProtected) {
+        if isProtectedSystemPath(path) || flags.contains(.systemProtected) {
             return PathRisk(classification: .systemProtected)
         }
 
         if isApplicationsRoot(path) || isProtectedApplicationBundle(path: path, name: lowercasedName, kind: kind) {
             return PathRisk(classification: .protectedApplicationBundle)
+        }
+
+        if flags.contains(.immutable) {
+            return PathRisk(classification: .immutable)
         }
 
         if isUserLibrary(path), !isUserCaches(path) {
@@ -77,7 +81,7 @@ public struct PathRiskPolicy: Sendable {
         let path = normalizedPath(url)
         return flags.contains(.systemProtected)
             || path == "/"
-            || isSystemProtected(path)
+            || isProtectedSystemPath(path)
             || isApplicationsRoot(path)
             || isVolumeRoot(path)
     }
@@ -90,13 +94,14 @@ public struct PathRiskPolicy: Sendable {
         return isUserCaches(normalizedPath(url)) || isCacheLike(path: normalizedPath(url), name: lowercasedName)
     }
 
-    public func isScannerProtected(url: URL, flags: NodeFlags = []) -> Bool {
-        let path = normalizedPath(url)
-        return flags.contains(.systemProtected)
-            || path == "/"
-            || isSystemProtected(path)
-            || isApplicationsRoot(path)
-            || isVolumeRoot(path)
+    public func isProtectedSystemPath(url: URL) -> Bool {
+        isProtectedSystemPath(normalizedPath(url))
+    }
+
+    private func isProtectedSystemPath(_ path: String) -> Bool {
+        systemProtectedPrefixes.contains { prefix in
+            path == prefix || path.hasPrefix(prefix + "/")
+        }
     }
 
     private func normalizedPath(_ url: URL) -> String {
@@ -106,12 +111,6 @@ public struct PathRiskPolicy: Sendable {
     private func isHomeRoot(_ path: String) -> Bool {
         let homePath = homeDirectory.path
         return path == homePath
-    }
-
-    private func isSystemProtected(_ path: String) -> Bool {
-        systemProtectedPrefixes.contains { prefix in
-            path == prefix || path.hasPrefix(prefix + "/")
-        }
     }
 
     private func isApplicationsRoot(_ path: String) -> Bool {
@@ -195,6 +194,7 @@ public enum PathRiskClassification: String, Hashable, Sendable {
     case homeRoot
     case systemRoot
     case systemProtected
+    case immutable
     case protectedApplicationBundle
     case volumeRoot
     case permissionDenied
@@ -210,6 +210,8 @@ public enum PathRiskClassification: String, Hashable, Sendable {
             return "The filesystem root is blocked."
         case .systemProtected:
             return "System-protected locations can only be revealed in Finder."
+        case .immutable:
+            return "This item is marked immutable, so Spatia will not move it to Trash."
         case .homeRoot:
             return "The home folder is blocked. Select a specific file or subfolder instead."
         case .userLibrary:
@@ -236,6 +238,7 @@ public enum PathRiskClassification: String, Hashable, Sendable {
              .homeRoot,
              .systemRoot,
              .systemProtected,
+             .immutable,
              .protectedApplicationBundle,
              .volumeRoot,
              .permissionDenied,

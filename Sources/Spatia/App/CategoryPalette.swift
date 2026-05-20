@@ -8,7 +8,7 @@ enum CategoryPalette {
     }
 
     static func nsColor(for category: FileCategory, kind: NodeKind, flags: NodeFlags, depth: Int) -> NSColor {
-        if flags.contains(.systemProtected) || flags.contains(.permissionDenied) {
+        if flags.contains(.systemProtected) || flags.contains(.immutable) || flags.contains(.permissionDenied) {
             return NSColor.systemGray.withAlphaComponent(0.28)
         }
 
