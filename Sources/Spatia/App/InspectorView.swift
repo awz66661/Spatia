@@ -106,6 +106,17 @@ private struct SelectionActionGroup: View {
             .help("Quick Look")
 
             if detail.url != nil {
+                if detail.canExpandPackage {
+                    Button {
+                        Task {
+                            await model.expandSelectedPackage()
+                        }
+                    } label: {
+                        Image(systemName: "square.stack.3d.down.right")
+                    }
+                    .help("Expand Package")
+                }
+
                 Button {
                     model.revealSelectedInFinder()
                 } label: {

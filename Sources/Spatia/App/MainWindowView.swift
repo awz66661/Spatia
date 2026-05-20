@@ -111,6 +111,12 @@ private struct TreemapDetailView: View {
                     onPreview: { nodeID in
                         model.quickLook(nodeID)
                     },
+                    onExpandPackage: { nodeID in
+                        model.select(nodeID)
+                        Task {
+                            await model.expandSelectedPackage()
+                        }
+                    },
                     onReveal: { nodeID in
                         model.select(nodeID)
                         model.revealSelectedInFinder()

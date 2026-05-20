@@ -1,4 +1,5 @@
 @testable import Spatia
+import Foundation
 import SpatiaCore
 import XCTest
 
@@ -396,6 +397,52 @@ final class AppModelNavigationTests: XCTestCase {
         XCTAssertFalse(model.canEnterSelectedContainer)
         XCTAssertTrue(model.canQuickLookSelected)
         XCTAssertTrue(model.canCopySelectedPath)
+    }
+
+    func testExpandSelectedPackageAppendsChildrenAndKeepsPackageSelected() async {
+        let model = AppModel()
+        let packageURL = URL(fileURLWithPath: "/tmp/root/Sample.app", isDirectory: true)
+        model.result = ScanResult(
+            snapshot: FileTreeSnapshot(
+                nodes: [
+                    FileNode(id: 0, parentID: nil, name: "root", url: URL(fileURLWithPath: "/tmp/root", isDirectory: true), kind: .directory, logicalSize: 100, allocatedSize: 100, children: [1]),
+                    FileNode(id: 1, parentID: 0, name: "Sample.app", url: packageURL, kind: .package, logicalSize: 100, allocatedSize: 100)
+                ],
+                rootID: 0
+            ),
+            summary: ScanSummary(rootURL: URL(fileURLWithPath: "/tmp/root", isDirectory: true), fileCount: 1, folderCount: 2, logicalBytes: 100, allocatedBytes: 100, duration: 1),
+            issues: []
+        )
+        model.displayRootID = 0
+        model.selectedID = 1
+
+        let scanRecorder = ScanPackageRecorder()
+        model.scanExpandedPackage = { url, options in
+            scanRecorder.record(url: url, options: options)
+            return ScanResult(
+                snapshot: FileTreeSnapshot(
+                    nodes: [
+                        FileNode(id: 0, parentID: nil, name: "Sample.app", url: packageURL, kind: .package, logicalSize: 120, allocatedSize: 120, children: [1]),
+                        FileNode(id: 1, parentID: 0, name: "Contents", url: packageURL.appendingPathComponent("Contents", isDirectory: true), kind: .directory, logicalSize: 120, allocatedSize: 120, children: [2]),
+                        FileNode(id: 2, parentID: 1, name: "payload.dat", url: packageURL.appendingPathComponent("Contents/payload.dat"), kind: .file, logicalSize: 120, allocatedSize: 120)
+                    ],
+                    rootID: 0
+                ),
+                summary: ScanSummary(rootURL: packageURL, fileCount: 1, folderCount: 2, logicalBytes: 120, allocatedBytes: 120, duration: 0),
+                issues: []
+            )
+        }
+
+        await model.expandSelectedPackage()
+
+        XCTAssertEqual(scanRecorder.scannedURL, packageURL)
+        XCTAssertTrue(scanRecorder.usedOptions?.expandPackages == true)
+        XCTAssertEqual(model.selectedID, 1)
+        XCTAssertEqual(model.result?.summary.allocatedBytes, 120)
+        XCTAssertEqual(model.result?.snapshot[1]?.children, [2])
+        XCTAssertEqual(model.result?.snapshot[2]?.parentID, 1)
+        XCTAssertEqual(model.expandedTreemapNodeIDs, [1])
+        XCTAssertEqual(model.statusText, "Expanded Sample.app.")
     }
 
     func testCopySelectedPathUsesSelectedURLAndUpdatesStatus() {
@@ -1137,5 +1184,30 @@ final class AppModelNavigationTests: XCTestCase {
             ],
             rootID: 0
         )
+    }
+
+    private final class ScanPackageRecorder: @unchecked Sendable {
+        private let lock = NSLock()
+        private var recordedURL: URL?
+        private var recordedOptions: ScanOptions?
+
+        var scannedURL: URL? {
+            lock.lock()
+            defer { lock.unlock() }
+            return recordedURL
+        }
+
+        var usedOptions: ScanOptions? {
+            lock.lock()
+            defer { lock.unlock() }
+            return recordedOptions
+        }
+
+        func record(url: URL, options: ScanOptions) {
+            lock.lock()
+            defer { lock.unlock() }
+            recordedURL = url
+            recordedOptions = options
+        }
     }
 }

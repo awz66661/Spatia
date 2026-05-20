@@ -54,6 +54,13 @@ struct SpatiaApp: App {
                 .keyboardShortcut(.space, modifiers: [])
                 .disabled(!model.canQuickLookSelected)
 
+                Button("Expand Package") {
+                    Task {
+                        await model.expandSelectedPackage()
+                    }
+                }
+                .disabled(!model.canExpandSelectedPackage)
+
                 Button("Reveal in Finder") {
                     model.revealSelectedInFinder()
                 }

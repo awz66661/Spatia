@@ -27,6 +27,9 @@ final class AppModel: ObservableObject {
     var scanEvents: @Sendable (URL, ScanOptions, @escaping (ScanEvent) -> Void) -> Void = { url, options, receive in
         FileScanner(options: options).scanEvents(root: url, receive: receive)
     }
+    var scanExpandedPackage: @Sendable (URL, ScanOptions) -> ScanResult = { url, options in
+        FileScanner(options: options).scan(root: url)
+    }
 
     private var scanTask: Task<Void, Never>?
     private var scanCancellationSource: ScanCancellationSource?
@@ -199,6 +202,7 @@ final class AppModel: ObservableObject {
             path: node.url?.path,
             url: node.url,
             canQuickLook: canQuickLook(node),
+            canExpandPackage: canExpandPackage(node),
             isProtected: risk.isVisuallyProtected,
             riskReason: risk.blockReason,
             canMoveToTrash: trashState.canMoveToTrash,
@@ -232,6 +236,11 @@ final class AppModel: ObservableObject {
     var canMoveSelectedToTrash: Bool {
         guard let selectedNode else { return false }
         return trashActionState(for: selectedNode).canMoveToTrash
+    }
+
+    var canExpandSelectedPackage: Bool {
+        guard let selectedNode else { return false }
+        return canExpandPackage(selectedNode)
     }
 
     func scanDownloads() {
@@ -522,6 +531,39 @@ final class AppModel: ObservableObject {
         handleTrashResult(result, nodeID: selectedID, nodeName: displayName(for: node))
     }
 
+    func expandSelectedPackage() async {
+        guard let selectedID,
+              selectedID != syntheticOtherNodeID,
+              let node = snapshot?[selectedID],
+              let url = node.url else {
+            statusText = "Choose a package to expand."
+            return
+        }
+
+        guard canExpandPackage(node) else {
+            statusText = "This package is already expanded or cannot be expanded."
+            return
+        }
+
+        statusText = "Expanding \(displayName(for: node))..."
+        let scanExpandedPackage = scanExpandedPackage
+        let preferences = scanPreferences
+        let options = ScanOptions(
+            expandPackages: true,
+            includeHiddenFiles: preferences.includeHiddenFiles,
+            maxDepth: nil
+        )
+        let expandedResult = await Task.detached(priority: .userInitiated) {
+            scanExpandedPackage(url, options)
+        }.value
+
+        reconcileExpandedPackage(
+            nodeID: selectedID,
+            nodeName: displayName(for: node),
+            expandedSnapshot: expandedResult.snapshot
+        )
+    }
+
     func goUp() {
         guard let displayRoot, let parentID = displayRoot.parentID else { return }
         displayRootID = parentID
@@ -559,6 +601,14 @@ final class AppModel: ObservableObject {
 
     private func canQuickLook(_ node: FileNode) -> Bool {
         node.id != syntheticOtherNodeID && node.kind == .file && node.url != nil
+    }
+
+    private func canExpandPackage(_ node: FileNode) -> Bool {
+        node.id != syntheticOtherNodeID
+            && node.kind == .package
+            && node.url != nil
+            && node.children.isEmpty
+            && !isScanning
     }
 
     private func trashActionState(for node: FileNode) -> TrashActionState {
@@ -670,6 +720,30 @@ final class AppModel: ObservableObject {
             displayRootID = snapshot.rootID
         }
         statusText = successStatusText ?? "Moved \(nodeName) to Trash."
+    }
+
+    private func reconcileExpandedPackage(
+        nodeID: NodeID,
+        nodeName: String,
+        expandedSnapshot: FileTreeSnapshot
+    ) {
+        guard var scanResult = result,
+              var snapshot = result?.snapshot,
+              let expanded = snapshot.expandPackageSubtree(rootedAt: nodeID, with: expandedSnapshot) else {
+            statusText = "Could not expand \(nodeName)."
+            return
+        }
+
+        scanResult.snapshot = snapshot
+        scanResult.summary.logicalBytes = max(0, scanResult.summary.logicalBytes + expanded.logicalDelta)
+        scanResult.summary.allocatedBytes = max(0, scanResult.summary.allocatedBytes + expanded.allocatedDelta)
+        result = scanResult
+        selectedID = nodeID
+        syntheticOtherSelection = nil
+        expandedTreemapNodeIDsStorage.insert(nodeID)
+        statusText = expanded.appendedNodeIDs.isEmpty
+            ? "\(nodeName) has no visible contents to expand."
+            : "Expanded \(nodeName)."
     }
 
     private func isNavigableContainer(_ node: FileNode) -> Bool {
@@ -898,6 +972,7 @@ struct SelectionDetail: Identifiable, Hashable {
     var path: String?
     var url: URL?
     var canQuickLook: Bool
+    var canExpandPackage: Bool
     var isProtected: Bool
     var riskReason: String?
     var canMoveToTrash: Bool

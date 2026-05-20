@@ -85,6 +85,99 @@ public struct FileTreeSnapshot: Sendable {
 
         return summary
     }
+
+    public mutating func expandPackageSubtree(
+        rootedAt packageID: NodeID,
+        with expandedSnapshot: FileTreeSnapshot
+    ) -> ExpandedSubtreeSummary? {
+        guard let packageNode = self[packageID],
+              packageNode.kind == .package,
+              let expandedRoot = expandedSnapshot.root else {
+            return nil
+        }
+
+        let oldLogicalBytes = packageNode.logicalSize
+        let oldAllocatedBytes = packageNode.allocatedSize
+        let newChildren = expandedRoot.children.compactMap { childID in
+            appendSubtree(
+                from: childID,
+                in: expandedSnapshot,
+                parentID: packageID
+            )
+        }
+
+        nodes[Int(packageID)] = FileNode(
+            id: packageNode.id,
+            parentID: packageNode.parentID,
+            name: packageNode.name,
+            url: packageNode.url,
+            kind: packageNode.kind,
+            flags: packageNode.flags,
+            typeIdentifier: packageNode.typeIdentifier,
+            logicalSize: expandedRoot.logicalSize,
+            allocatedSize: expandedRoot.allocatedSize,
+            modifiedAt: packageNode.modifiedAt,
+            children: newChildren,
+            scanState: expandedRoot.scanState
+        )
+
+        let logicalDelta = expandedRoot.logicalSize - oldLogicalBytes
+        let allocatedDelta = expandedRoot.allocatedSize - oldAllocatedBytes
+        applySizeDelta(
+            logical: logicalDelta,
+            allocated: allocatedDelta,
+            toAncestorsOf: packageNode.parentID
+        )
+
+        return ExpandedSubtreeSummary(
+            appendedNodeIDs: subtreeIDs(rootedAt: packageID).filter { $0 != packageID },
+            logicalDelta: logicalDelta,
+            allocatedDelta: allocatedDelta
+        )
+    }
+
+    private mutating func appendSubtree(
+        from sourceID: NodeID,
+        in sourceSnapshot: FileTreeSnapshot,
+        parentID: NodeID
+    ) -> NodeID? {
+        guard let sourceNode = sourceSnapshot[sourceID] else { return nil }
+
+        let newID = NodeID(nodes.count)
+        nodes.append(
+            FileNode(
+                id: newID,
+                parentID: parentID,
+                name: sourceNode.name,
+                url: sourceNode.url,
+                kind: sourceNode.kind,
+                flags: sourceNode.flags,
+                typeIdentifier: sourceNode.typeIdentifier,
+                logicalSize: sourceNode.logicalSize,
+                allocatedSize: sourceNode.allocatedSize,
+                modifiedAt: sourceNode.modifiedAt,
+                children: [],
+                scanState: sourceNode.scanState
+            )
+        )
+
+        let children = sourceNode.children.compactMap { childID in
+            appendSubtree(from: childID, in: sourceSnapshot, parentID: newID)
+        }
+        nodes[Int(newID)].children = children
+        return newID
+    }
+
+    private mutating func applySizeDelta(logical: Int64, allocated: Int64, toAncestorsOf parentID: NodeID?) {
+        guard logical != 0 || allocated != 0 else { return }
+
+        var ancestorID = parentID
+        while let currentID = ancestorID, let current = self[currentID] {
+            nodes[Int(currentID)].logicalSize = max(0, current.logicalSize + logical)
+            nodes[Int(currentID)].allocatedSize = max(0, current.allocatedSize + allocated)
+            ancestorID = current.parentID
+        }
+    }
 }
 
 public struct RemovedSubtreeSummary: Hashable, Sendable {
@@ -103,5 +196,21 @@ public struct RemovedSubtreeSummary: Hashable, Sendable {
         self.folderCount = folderCount
         self.logicalBytes = logicalBytes
         self.allocatedBytes = allocatedBytes
+    }
+}
+
+public struct ExpandedSubtreeSummary: Hashable, Sendable {
+    public var appendedNodeIDs: [NodeID]
+    public var logicalDelta: Int64
+    public var allocatedDelta: Int64
+
+    public init(
+        appendedNodeIDs: [NodeID],
+        logicalDelta: Int64,
+        allocatedDelta: Int64
+    ) {
+        self.appendedNodeIDs = appendedNodeIDs
+        self.logicalDelta = logicalDelta
+        self.allocatedDelta = allocatedDelta
     }
 }

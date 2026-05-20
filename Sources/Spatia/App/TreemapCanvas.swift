@@ -9,6 +9,7 @@ struct TreemapCanvas: NSViewRepresentable {
     @Binding var selectedID: NodeID?
     var onActivate: (NodeID) -> Void
     var onPreview: (NodeID) -> Void
+    var onExpandPackage: (NodeID) -> Void
     var onReveal: (NodeID) -> Void
     var onCopyPath: (NodeID) -> Void
     var onMoveToTrash: (NodeID) -> Void
@@ -19,6 +20,7 @@ struct TreemapCanvas: NSViewRepresentable {
         view.onSelect = { selectedID = $0 }
         view.onActivate = onActivate
         view.onPreview = onPreview
+        view.onExpandPackage = onExpandPackage
         view.onReveal = onReveal
         view.onCopyPath = onCopyPath
         view.onMoveToTrash = onMoveToTrash
@@ -34,6 +36,7 @@ struct TreemapCanvas: NSViewRepresentable {
         nsView.onSelect = { selectedID = $0 }
         nsView.onActivate = onActivate
         nsView.onPreview = onPreview
+        nsView.onExpandPackage = onExpandPackage
         nsView.onReveal = onReveal
         nsView.onCopyPath = onCopyPath
         nsView.onMoveToTrash = onMoveToTrash
@@ -106,6 +109,7 @@ final class TreemapNSView: NSView {
     var onSelect: ((NodeID?) -> Void)?
     var onActivate: ((NodeID) -> Void)?
     var onPreview: ((NodeID) -> Void)?
+    var onExpandPackage: ((NodeID) -> Void)?
     var onReveal: ((NodeID) -> Void)?
     var onCopyPath: ((NodeID) -> Void)?
     var onMoveToTrash: ((NodeID) -> Void)?
@@ -294,6 +298,7 @@ final class TreemapNSView: NSView {
         let menu = NSMenu()
         addMenuItem("Enter", action: #selector(enterContextMenuTile), to: menu, enabled: canActivate(tile))
         addMenuItem("Quick Look", action: #selector(previewContextMenuTile), to: menu, enabled: tile.kind == .file)
+        addMenuItem("Expand Package", action: #selector(expandContextMenuPackage), to: menu, enabled: tile.kind == .package)
         addMenuItem("Reveal in Finder", action: #selector(revealContextMenuTile), to: menu)
         addMenuItem("Copy Path", action: #selector(copyContextMenuTilePath), to: menu)
         menu.addItem(.separator())
@@ -395,6 +400,15 @@ final class TreemapNSView: NSView {
     @objc private func previewContextMenuTile() {
         guard let contextMenuTile, contextMenuTile.nodeID != syntheticOtherNodeID else { return }
         onPreview?(contextMenuTile.nodeID)
+    }
+
+    @objc private func expandContextMenuPackage() {
+        guard let contextMenuTile,
+              contextMenuTile.nodeID != syntheticOtherNodeID,
+              contextMenuTile.kind == .package else {
+            return
+        }
+        onExpandPackage?(contextMenuTile.nodeID)
     }
 
     @objc private func revealContextMenuTile() {
