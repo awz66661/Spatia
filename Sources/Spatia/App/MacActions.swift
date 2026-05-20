@@ -16,6 +16,66 @@ enum MacActions {
     static func quickLook(_ url: URL) {
         QuickLookCoordinator.shared.preview(url)
     }
+
+    static func confirmMoveToTrash(_ confirmation: TrashConfirmation) -> Bool {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "Move \"\(confirmation.name)\" to Trash?"
+
+        var details = [
+            "Path: \(confirmation.path)",
+            "Size: \(confirmation.sizeText)",
+            "Items: \(confirmation.itemCount)"
+        ]
+        details.append(contentsOf: confirmation.warnings)
+        alert.informativeText = details.joined(separator: "\n")
+        alert.addButton(withTitle: "Move to Trash")
+        alert.addButton(withTitle: "Cancel")
+
+        return alert.runModal() == .alertFirstButtonReturn
+    }
+
+    static func moveToTrash(_ url: URL) async -> TrashActionResult {
+        await withCheckedContinuation { continuation in
+            NSWorkspace.shared.recycle([url]) { newURLs, error in
+                if let error {
+                    let nsError = error as NSError
+                    if nsError.code == NSUserCancelledError {
+                        continuation.resume(returning: .cancelled)
+                    } else if nsError.domain == NSCocoaErrorDomain && nsError.code == NSFileWriteNoPermissionError {
+                        continuation.resume(returning: .permissionDenied(error.localizedDescription))
+                    } else if newURLs[url] != nil {
+                        continuation.resume(returning: .partialFailure(error.localizedDescription))
+                    } else {
+                        continuation.resume(returning: .failed(error.localizedDescription))
+                    }
+                    return
+                }
+
+                if let resultingURL = newURLs[url] {
+                    continuation.resume(returning: .moved(resultingURL: resultingURL))
+                } else {
+                    continuation.resume(returning: .failed("The item was not moved to Trash."))
+                }
+            }
+        }
+    }
+}
+
+struct TrashConfirmation: Hashable {
+    var name: String
+    var path: String
+    var sizeText: String
+    var itemCount: Int
+    var warnings: [String]
+}
+
+enum TrashActionResult: Equatable {
+    case moved(resultingURL: URL?)
+    case cancelled
+    case permissionDenied(String)
+    case partialFailure(String)
+    case failed(String)
 }
 
 private final class QuickLookCoordinator: NSObject, QLPreviewPanelDataSource, QLPreviewPanelDelegate {

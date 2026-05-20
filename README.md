@@ -5,7 +5,7 @@
 </p>
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
-![macOS](https://img.shields.io/badge/macOS-14%2B-black)
+![macOS](https://img.shields.io/badge/macOS-26%2B-black)
 ![SwiftPM](https://img.shields.io/badge/SwiftPM-compatible-orange)
 [![CI](https://img.shields.io/badge/CI-workflow%20configured-informational)](.github/workflows/ci.yml)
 [![Version](https://img.shields.io/badge/version-see%20VERSION-lightgrey)](VERSION)
@@ -21,26 +21,27 @@ It is a file space map, not a Mac cleaner. Scans are user initiated, results sta
 - Navigate into large folders with breadcrumbs.
 - Inspect disk usage, logical size, kind, category, modified date, and path.
 - Quick Look files, reveal items in Finder, and copy paths.
+- Move selected items to Trash after safety checks and confirmation.
 - Summarize unreadable locations without interrupting the scan.
 
 ## Status
 
 Spatia is pre-1.0 macOS software.
 
-- Minimum macOS: 14.
+- Minimum macOS: 26.
 - Current version: see [VERSION](VERSION).
 - Distribution target: GitHub Releases.
 - Notarization: deferred for early releases.
 - App Store: not planned for the first phase.
-- Deletion: not implemented; any future deletion must be reversible and limited to Move to Trash.
+- Deletion: limited to selected-item Move to Trash; permanent deletion and bulk deletion are not implemented.
 
 ## Build From Source
 
 Requirements:
 
-- macOS 14 or newer
+- macOS 26 or newer
 - Full Xcode recommended
-- Swift 5.9 or newer
+- Swift 6.2 or newer
 
 ```sh
 ./Scripts/check-version.sh

@@ -394,6 +394,42 @@ final class AppModelNavigationTests: XCTestCase {
         XCTAssertTrue(model.expandedTreemapNodeIDs.isEmpty)
     }
 
+    func testRescanCurrentSourceWithoutURLKeepsScanIdle() {
+        let model = AppModel()
+        model.statusText = "Ready"
+
+        model.rescanCurrentSource()
+
+        XCTAssertFalse(model.isScanning)
+        XCTAssertNil(model.currentScanURL)
+        XCTAssertEqual(model.statusText, "Choose a folder to scan.")
+    }
+
+    func testRescanCurrentSourceScansCurrentURL() async throws {
+        let model = AppModel()
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try "spatia".write(
+            to: root.appendingPathComponent("fixture.txt"),
+            atomically: true,
+            encoding: .utf8
+        )
+        defer {
+            try? FileManager.default.removeItem(at: root)
+        }
+
+        model.currentScanURL = root
+
+        model.rescanCurrentSource()
+        await waitForScanResult(model)
+
+        XCTAssertEqual(model.currentScanURL?.path, root.path)
+        XCTAssertEqual(model.result?.summary.rootURL.path, root.path)
+        XCTAssertEqual(model.result?.summary.fileCount, 1)
+        XCTAssertFalse(model.isScanning)
+    }
+
     func testNavigateToBreadcrumbClearsExpandedTreemapNodeIDs() {
         let model = AppModel()
         model.result = ScanResult(
@@ -415,6 +451,169 @@ final class AppModelNavigationTests: XCTestCase {
 
         XCTAssertEqual(model.displayRootID, 0)
         XCTAssertTrue(model.expandedTreemapNodeIDs.isEmpty)
+    }
+
+    func testSelectedNodeDetailBlocksHomeRootTrash() {
+        let model = AppModel()
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        model.result = ScanResult(
+            snapshot: FileTreeSnapshot(
+                nodes: [
+                    FileNode(
+                        id: 0,
+                        parentID: nil,
+                        name: "Users",
+                        url: URL(fileURLWithPath: "/Users", isDirectory: true),
+                        kind: .directory,
+                        logicalSize: 100,
+                        allocatedSize: 100,
+                        children: [1]
+                    ),
+                    FileNode(
+                        id: 1,
+                        parentID: 0,
+                        name: home.lastPathComponent,
+                        url: home,
+                        kind: .directory,
+                        logicalSize: 100,
+                        allocatedSize: 100
+                    )
+                ],
+                rootID: 0
+            ),
+            summary: ScanSummary(rootURL: URL(fileURLWithPath: "/Users", isDirectory: true), fileCount: 0, folderCount: 2, logicalBytes: 100, allocatedBytes: 100, duration: 0),
+            issues: []
+        )
+        model.displayRootID = 0
+        model.selectedID = 1
+
+        let detail = model.selectedNodeDetail
+
+        XCTAssertEqual(detail?.canMoveToTrash, false)
+        XCTAssertTrue(detail?.trashDisabledReason?.contains("home folder") == true)
+    }
+
+    func testMoveSelectedItemToTrashConfirmsAndReconcilesSnapshot() async {
+        let model = AppModel()
+        model.result = ScanResult(
+            snapshot: sidebarSnapshot(),
+            summary: ScanSummary(rootURL: URL(fileURLWithPath: "/tmp/root", isDirectory: true), fileCount: 2, folderCount: 3, logicalBytes: 100, allocatedBytes: 100, duration: 1),
+            issues: []
+        )
+        model.displayRootID = 0
+        model.selectedID = 3
+
+        var confirmation: TrashConfirmation?
+        var movedURL: URL?
+        model.confirmMoveToTrash = {
+            confirmation = $0
+            return true
+        }
+        model.moveToTrash = {
+            movedURL = $0
+            return .moved(resultingURL: URL(fileURLWithPath: "/Users/example/.Trash/small.txt"))
+        }
+
+        await model.moveSelectedItemToTrash()
+
+        XCTAssertEqual(confirmation?.name, "small.txt")
+        XCTAssertEqual(confirmation?.itemCount, 1)
+        XCTAssertEqual(movedURL?.path, "/tmp/root/small.txt")
+        XCTAssertNil(model.selectedID)
+        XCTAssertEqual(model.result?.snapshot.root?.children, [1, 2])
+        XCTAssertEqual(model.result?.summary.fileCount, 1)
+        XCTAssertEqual(model.result?.summary.allocatedBytes, 80)
+        XCTAssertEqual(model.statusText, "Moved small.txt to Trash.")
+    }
+
+    func testMoveSelectedDirectoryToTrashIncludesWarningsAndCountsSubtree() async {
+        let model = AppModel()
+        model.result = ScanResult(
+            snapshot: sidebarSnapshot(),
+            summary: ScanSummary(rootURL: URL(fileURLWithPath: "/tmp/root", isDirectory: true), fileCount: 2, folderCount: 3, logicalBytes: 100, allocatedBytes: 100, duration: 1),
+            issues: []
+        )
+        model.displayRootID = 0
+        model.selectedID = 1
+
+        var confirmation: TrashConfirmation?
+        model.confirmMoveToTrash = {
+            confirmation = $0
+            return true
+        }
+        model.moveToTrash = { _ in .moved(resultingURL: nil) }
+
+        await model.moveSelectedItemToTrash()
+
+        XCTAssertEqual(confirmation?.itemCount, 2)
+        XCTAssertTrue(confirmation?.warnings.contains { $0.contains("folder") } == true)
+        XCTAssertEqual(model.result?.snapshot.root?.children, [2, 3])
+        XCTAssertEqual(model.result?.summary.folderCount, 2)
+        XCTAssertEqual(model.result?.summary.fileCount, 1)
+    }
+
+    func testMoveSelectedItemToTrashCancellationDoesNotChangeSnapshot() async {
+        let model = AppModel()
+        model.result = ScanResult(
+            snapshot: sidebarSnapshot(),
+            summary: ScanSummary(rootURL: URL(fileURLWithPath: "/tmp/root", isDirectory: true), fileCount: 2, folderCount: 3, logicalBytes: 100, allocatedBytes: 100, duration: 1),
+            issues: []
+        )
+        model.displayRootID = 0
+        model.selectedID = 3
+        model.confirmMoveToTrash = { _ in true }
+        model.moveToTrash = { _ in .cancelled }
+
+        await model.moveSelectedItemToTrash()
+
+        XCTAssertEqual(model.result?.snapshot.root?.children, [1, 2, 3])
+        XCTAssertEqual(model.selectedID, 3)
+        XCTAssertEqual(model.statusText, "Move to Trash cancelled.")
+    }
+
+    func testMoveSelectedItemToTrashPermissionFailureDoesNotChangeSnapshot() async {
+        let model = AppModel()
+        model.result = ScanResult(
+            snapshot: sidebarSnapshot(),
+            summary: ScanSummary(rootURL: URL(fileURLWithPath: "/tmp/root", isDirectory: true), fileCount: 2, folderCount: 3, logicalBytes: 100, allocatedBytes: 100, duration: 1),
+            issues: []
+        )
+        model.displayRootID = 0
+        model.selectedID = 3
+        model.confirmMoveToTrash = { _ in true }
+        model.moveToTrash = { _ in .permissionDenied("No permission") }
+
+        await model.moveSelectedItemToTrash()
+
+        XCTAssertEqual(model.result?.snapshot.root?.children, [1, 2, 3])
+        XCTAssertEqual(model.selectedID, 3)
+        XCTAssertTrue(model.statusText.contains("Permission denied"))
+    }
+
+    func testMoveSelectedItemToTrashPartialFailureStillReconciles() async {
+        let model = AppModel()
+        model.result = ScanResult(
+            snapshot: sidebarSnapshot(),
+            summary: ScanSummary(rootURL: URL(fileURLWithPath: "/tmp/root", isDirectory: true), fileCount: 2, folderCount: 3, logicalBytes: 100, allocatedBytes: 100, duration: 1),
+            issues: []
+        )
+        model.displayRootID = 0
+        model.selectedID = 3
+        model.confirmMoveToTrash = { _ in true }
+        model.moveToTrash = { _ in .partialFailure("Finder reported a warning") }
+
+        await model.moveSelectedItemToTrash()
+
+        XCTAssertNil(model.selectedID)
+        XCTAssertEqual(model.result?.snapshot.root?.children, [1, 2])
+        XCTAssertTrue(model.statusText.contains("partial failure"))
+    }
+
+    private func waitForScanResult(_ model: AppModel, timeout: TimeInterval = 2) async {
+        let deadline = Date().addingTimeInterval(timeout)
+        while model.result == nil && Date() < deadline {
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
     }
 
     private func sidebarSnapshot() -> FileTreeSnapshot {

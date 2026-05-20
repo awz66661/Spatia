@@ -35,4 +35,6 @@ The first GitHub-distributed build is intentionally non-sandboxed. If a sandboxe
 
 ## Deletion Permissions
 
-Deletion is not part of the current app skeleton. When added, it must use Move to Trash only and route all decisions through `SafetyPolicy`.
+Deletion is limited to selected-item Move to Trash and all decisions route through `SafetyPolicy`.
+
+Blocked locations include system roots, the home folder root, user Library except caches, volume roots, unreadable items, and protected application bundles. Packages, ordinary folders, caches, and items with uncertain recoverable-space behavior require confirmation. Permanent deletion and bulk deletion are not implemented.

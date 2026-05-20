@@ -28,5 +28,5 @@ Useful reports include:
 - Scans are user initiated.
 - Scan results stay local.
 - The app does not include telemetry, background indexing, or cloud sync.
-- Deletion is not implemented. Future deletion must be limited to Move to Trash and routed through safety policy.
+- Deletion is limited to selected-item Move to Trash and routed through safety policy. Permanent deletion and bulk deletion are not implemented.
 - Early builds must not claim to be notarized or App Store distributed unless that release flow exists and has been verified.

@@ -14,7 +14,9 @@ Current tests cover:
 - scanner aggregation and options
 - scanner type identifier fallback
 - package and symlink behavior
-- deletion safety policy basics
+- shared path risk policy behavior
+- deletion safety policy matrix
+- Move to Trash confirmation, cancellation, failure, partial-failure, and local-refresh behavior
 
 Run:
 
@@ -52,6 +54,8 @@ Actions:
 - user Library blocking
 - cache warning
 - package warning
+- directory warning
+- recoverable-space caveat
 - Move to Trash confirmation flow
 
 ## Fixture Plan

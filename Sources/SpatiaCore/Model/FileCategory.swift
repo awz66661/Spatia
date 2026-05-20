@@ -31,11 +31,14 @@ public enum FileCategoryClassifier {
         typeIdentifier: String?,
         flags: NodeFlags = []
     ) -> FileCategory {
-        if flags.contains(.systemProtected) || isSystemPath(path) {
+        let url = path.map { URL(fileURLWithPath: $0, isDirectory: kind == .directory || kind == .package || kind == .volume) }
+        let pathRiskPolicy = PathRiskPolicy()
+
+        if pathRiskPolicy.isSystemCategory(url: url, flags: flags) {
             return .system
         }
 
-        if isCachePath(path, name: name) {
+        if pathRiskPolicy.isCacheCategory(url: url, name: name) {
             return .cache
         }
 
@@ -86,34 +89,6 @@ public enum FileCategoryClassifier {
         utiHints: [String]
     ) -> Bool {
         extensions.contains(ext) || utiHints.contains { uti.contains($0) }
-    }
-
-    private static func isSystemPath(_ path: String?) -> Bool {
-        guard let path else { return false }
-        return path == "/System"
-            || path.hasPrefix("/System/")
-            || path == "/Library"
-            || path.hasPrefix("/Library/")
-            || path == "/bin"
-            || path.hasPrefix("/bin/")
-            || path == "/sbin"
-            || path.hasPrefix("/sbin/")
-            || path == "/usr"
-            || path.hasPrefix("/usr/")
-            || path == "/private"
-            || path.hasPrefix("/private/")
-    }
-
-    private static func isCachePath(_ path: String?, name: String) -> Bool {
-        let lowercasedName = name.lowercased()
-        guard let lowercasedPath = path?.lowercased() else {
-            return lowercasedName == "caches" || lowercasedName.contains("cache")
-        }
-
-        return lowercasedPath.contains("/library/caches/")
-            || lowercasedPath.hasSuffix("/library/caches")
-            || lowercasedName == "caches"
-            || lowercasedName.contains("cache")
     }
 
     private static let videoExtensions: Set<String> = [

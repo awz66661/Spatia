@@ -12,8 +12,13 @@ final class AppModel: ObservableObject {
     @Published var currentScanURL: URL?
     @Published private var expandedTreemapNodeIDsStorage: Set<NodeID> = []
 
+    var confirmMoveToTrash: (TrashConfirmation) -> Bool = MacActions.confirmMoveToTrash
+    var moveToTrash: (URL) async -> TrashActionResult = MacActions.moveToTrash
+
     private var scanTask: Task<Void, Never>?
     private var scanCancellationSource: ScanCancellationSource?
+    private let pathRiskPolicy = PathRiskPolicy()
+    private let safetyPolicy = SafetyPolicy()
 
     var snapshot: FileTreeSnapshot? {
         result?.snapshot
@@ -89,6 +94,8 @@ final class AppModel: ObservableObject {
 
     var selectedNodeDetail: SelectionDetail? {
         guard let node = selectedNode else { return nil }
+        let trashState = trashActionState(for: node)
+        let risk = pathRiskPolicy.risk(for: node)
         return SelectionDetail(
             id: node.id,
             name: displayName(for: node),
@@ -100,7 +107,11 @@ final class AppModel: ObservableObject {
             path: node.url?.path,
             url: node.url,
             canQuickLook: canQuickLook(node),
-            isProtected: node.flags.contains(.systemProtected) || node.flags.contains(.permissionDenied)
+            isProtected: risk.isVisuallyProtected,
+            riskReason: risk.blockReason,
+            canMoveToTrash: trashState.canMoveToTrash,
+            trashDisabledReason: trashState.disabledReason,
+            trashWarnings: trashState.warnings
         )
     }
 
@@ -144,6 +155,15 @@ final class AppModel: ObservableObject {
 
         guard panel.runModal() == .OK, let url = panel.url else { return }
         scan(url)
+    }
+
+    func rescanCurrentSource() {
+        guard let currentScanURL else {
+            statusText = "Choose a folder to scan."
+            return
+        }
+
+        scan(currentScanURL)
     }
 
     func scan(_ url: URL) {
@@ -221,6 +241,39 @@ final class AppModel: ObservableObject {
         MacActions.quickLook(url)
     }
 
+    func moveSelectedItemToTrash() async {
+        guard let selectedID,
+              selectedID != syntheticOtherNodeID,
+              let node = snapshot?[selectedID],
+              let url = node.url else {
+            statusText = "Choose an item to move to Trash."
+            return
+        }
+
+        let trashState = trashActionState(for: node)
+        guard trashState.canMoveToTrash else {
+            statusText = trashState.disabledReason ?? "This item cannot be moved to Trash."
+            return
+        }
+
+        let confirmation = TrashConfirmation(
+            name: displayName(for: node),
+            path: url.path,
+            sizeText: ByteCount.string(node.allocatedSize),
+            itemCount: itemCount(inSubtreeRootedAt: node.id),
+            warnings: trashState.warnings
+        )
+
+        guard confirmMoveToTrash(confirmation) else {
+            statusText = "Move to Trash cancelled."
+            return
+        }
+
+        statusText = "Moving \(displayName(for: node)) to Trash..."
+        let result = await moveToTrash(url)
+        handleTrashResult(result, nodeID: selectedID, nodeName: displayName(for: node))
+    }
+
     func goUp() {
         guard let displayRoot, let parentID = displayRoot.parentID else { return }
         displayRootID = parentID
@@ -256,6 +309,81 @@ final class AppModel: ObservableObject {
 
     private func canQuickLook(_ node: FileNode) -> Bool {
         node.id != syntheticOtherNodeID && node.kind == .file && node.url != nil
+    }
+
+    private func trashActionState(for node: FileNode) -> TrashActionState {
+        guard node.id != syntheticOtherNodeID else {
+            return TrashActionState(canMoveToTrash: false, disabledReason: "Grouped small items cannot be moved to Trash.", warnings: [])
+        }
+
+        guard node.id != snapshot?.rootID else {
+            return TrashActionState(canMoveToTrash: false, disabledReason: "The scanned root cannot be moved to Trash from Spatia.", warnings: [])
+        }
+
+        let decision = safetyPolicy.trashDecision(for: node)
+        if let reason = decision.blockedReason {
+            return TrashActionState(canMoveToTrash: false, disabledReason: reason, warnings: [])
+        }
+
+        return TrashActionState(
+            canMoveToTrash: node.url != nil,
+            disabledReason: node.url == nil ? "This item does not have a filesystem URL." : nil,
+            warnings: decision.warnings
+        )
+    }
+
+    private func itemCount(inSubtreeRootedAt id: NodeID) -> Int {
+        snapshot?.subtreeIDs(rootedAt: id).count ?? 0
+    }
+
+    private func handleTrashResult(_ result: TrashActionResult, nodeID: NodeID, nodeName: String) {
+        switch result {
+        case .moved:
+            reconcileMovedToTrash(nodeID: nodeID, nodeName: nodeName)
+        case .cancelled:
+            statusText = "Move to Trash cancelled."
+        case let .permissionDenied(message):
+            statusText = "Permission denied moving \(nodeName) to Trash: \(message)"
+        case let .partialFailure(message):
+            reconcileMovedToTrash(
+                nodeID: nodeID,
+                nodeName: nodeName,
+                successStatusText: "Moved \(nodeName), but macOS reported a partial failure: \(message)"
+            )
+        case let .failed(message):
+            statusText = "Could not move \(nodeName) to Trash: \(message)"
+        }
+    }
+
+    private func reconcileMovedToTrash(
+        nodeID: NodeID,
+        nodeName: String,
+        successStatusText: String? = nil
+    ) {
+        guard var scanResult = result,
+              var snapshot = result?.snapshot,
+              let removedIDs = result?.snapshot.subtreeIDs(rootedAt: nodeID),
+              let removed = snapshot.detachSubtree(rootedAt: nodeID) else {
+            statusText = "Moved \(nodeName) to Trash. Rescanning..."
+            if let currentScanURL {
+                scan(currentScanURL)
+            }
+            return
+        }
+
+        scanResult.snapshot = snapshot
+        scanResult.summary.fileCount = max(0, scanResult.summary.fileCount - removed.fileCount)
+        scanResult.summary.folderCount = max(0, scanResult.summary.folderCount - removed.folderCount)
+        scanResult.summary.logicalBytes = max(0, scanResult.summary.logicalBytes - removed.logicalBytes)
+        scanResult.summary.allocatedBytes = max(0, scanResult.summary.allocatedBytes - removed.allocatedBytes)
+
+        result = scanResult
+        selectedID = nil
+        expandedTreemapNodeIDsStorage.subtract(removedIDs)
+        if displayRootID == nodeID {
+            displayRootID = snapshot.rootID
+        }
+        statusText = successStatusText ?? "Moved \(nodeName) to Trash."
     }
 
     private func isNavigableContainer(_ node: FileNode) -> Bool {
@@ -346,4 +474,14 @@ struct SelectionDetail: Identifiable, Hashable {
     var url: URL?
     var canQuickLook: Bool
     var isProtected: Bool
+    var riskReason: String?
+    var canMoveToTrash: Bool
+    var trashDisabledReason: String?
+    var trashWarnings: [String]
+}
+
+struct TrashActionState: Hashable {
+    var canMoveToTrash: Bool
+    var disabledReason: String?
+    var warnings: [String]
 }

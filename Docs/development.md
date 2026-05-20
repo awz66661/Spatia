@@ -2,9 +2,9 @@
 
 ## Requirements
 
-- macOS 14 or newer
+- macOS 26 or newer
 - Full Xcode is recommended for app development
-- Swift 5.9 or newer
+- Swift 6.2 or newer
 
 Command Line Tools alone may be enough for package-level builds, but native app development, XCTest, and release builds should use a full Xcode install.
 

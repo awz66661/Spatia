@@ -109,8 +109,17 @@ private struct FileTreeBuilder {
         .fileAllocatedSizeKey,
         .totalFileAllocatedSizeKey,
         .contentModificationDateKey,
-        .isHiddenKey
+        .isHiddenKey,
+        .isSystemImmutableKey,
+        .isUserImmutableKey,
+        .mayShareFileContentKey,
+        .isPurgeableKey,
+        .isSparseKey,
+        .isUbiquitousItemKey,
+        .ubiquitousItemDownloadingStatusKey
     ]
+
+    private let pathRiskPolicy = PathRiskPolicy()
 
     init(options: ScanOptions) {
         self.options = options
@@ -145,7 +154,7 @@ private struct FileTreeBuilder {
         let name = url.lastPathComponent.isEmpty ? url.path : url.lastPathComponent
         var flags = nodeFlags(for: values)
 
-        if isProtectedPath(url) {
+        if pathRiskPolicy.isScannerProtected(url: url, flags: flags) {
             flags.insert(.systemProtected)
         }
 
@@ -334,6 +343,19 @@ private struct FileTreeBuilder {
         if values?.isHidden == true {
             flags.insert(.hidden)
         }
+        if values?.isSystemImmutable == true || values?.isUserImmutable == true {
+            flags.insert(.systemProtected)
+        }
+        if values?.mayShareFileContent == true || values?.isSparse == true {
+            flags.insert(.possiblySharedAPFSBlocks)
+        }
+        if values?.isPurgeable == true {
+            flags.insert(.purgeable)
+        }
+        if values?.isUbiquitousItem == true
+            && values?.ubiquitousItemDownloadingStatus == URLUbiquitousItemDownloadingStatus.notDownloaded {
+            flags.insert(.iCloudPlaceholder)
+        }
         return flags
     }
 
@@ -345,17 +367,4 @@ private struct FileTreeBuilder {
         Int64(values?.totalFileAllocatedSize ?? values?.fileAllocatedSize ?? values?.fileSize ?? 0)
     }
 
-    private func isProtectedPath(_ url: URL) -> Bool {
-        let path = url.standardizedFileURL.path
-        return path == "/System"
-            || path.hasPrefix("/System/")
-            || path == "/bin"
-            || path.hasPrefix("/bin/")
-            || path == "/sbin"
-            || path.hasPrefix("/sbin/")
-            || path == "/usr"
-            || path.hasPrefix("/usr/")
-            || path == "/private"
-            || path.hasPrefix("/private/")
-    }
 }

@@ -14,7 +14,7 @@ Spatia is intentionally scoped as a disk space visualizer first. Contributions s
 ./Scripts/test.sh
 ```
 
-Open `Package.swift` in Xcode when working on the native UI. The package minimum platform is macOS 14.
+Open `Package.swift` in Xcode when working on the native UI. The package minimum platform is macOS 26.
 
 ## Pull Requests
 

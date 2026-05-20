@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   release:
-    runs-on: macos-14
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
 
@@ -69,7 +69,7 @@ jobs:
           - This DMG is not notarized.
           - macOS may show unidentified-developer or Gatekeeper warnings.
           - Spatia is a local-first disk space visualizer, not a Mac cleaner.
-          - Deletion is not implemented in this release.
+          - Deletion is limited to selected-item Move to Trash; permanent deletion and bulk deletion are not implemented.
 
           Assets:
           - Spatia-${VERSION}.dmg
