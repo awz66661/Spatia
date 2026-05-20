@@ -12,6 +12,9 @@ final class AppModel: ObservableObject {
     @Published var currentScanURL: URL?
     @Published var scanPreferences = ScanPreferences()
     @Published var sidebarInsightMode: SidebarInsightMode = .here
+    @Published private var partialScanSnapshot: FileTreeSnapshot?
+    @Published private var partialScanIssues: [ScanIssue] = []
+    @Published private var scanProgress: ScanProgress?
     @Published private var syntheticOtherSelection: SyntheticOtherSelection?
     @Published private var expandedTreemapNodeIDsStorage: Set<NodeID> = []
 
@@ -20,8 +23,8 @@ final class AppModel: ObservableObject {
     var quickLookFile: (URL) -> QuickLookResult = MacActions.quickLook
     var revealInFinder: (URL) -> Void = MacActions.reveal
     var copyPathToPasteboard: (URL) -> Void = MacActions.copyPath
-    var scanRoot: @Sendable (URL, ScanOptions) -> ScanResult = { url, options in
-        FileScanner(options: options).scan(root: url)
+    var scanEvents: @Sendable (URL, ScanOptions, @escaping (ScanEvent) -> Void) -> Void = { url, options, receive in
+        FileScanner(options: options).scanEvents(root: url, receive: receive)
     }
 
     private var scanTask: Task<Void, Never>?
@@ -30,7 +33,7 @@ final class AppModel: ObservableObject {
     private let safetyPolicy = SafetyPolicy()
 
     var snapshot: FileTreeSnapshot? {
-        result?.snapshot
+        result?.snapshot ?? partialScanSnapshot
     }
 
     var displayRoot: FileNode? {
@@ -70,18 +73,30 @@ final class AppModel: ObservableObject {
     }
 
     var permissionIssues: [ScanIssue] {
-        result?.issues ?? []
+        result?.issues ?? partialScanIssues
     }
 
     var scanOverview: ScanOverview? {
-        guard let summary = result?.summary else { return nil }
+        if let summary = result?.summary {
+            return ScanOverview(
+                sourceName: displayName(for: summary.rootURL),
+                sourcePath: summary.rootURL.path,
+                diskUsage: ByteCount.string(summary.allocatedBytes),
+                fileCount: "\(summary.fileCount)",
+                folderCount: "\(summary.folderCount)",
+                duration: String(format: "%.1fs", summary.duration)
+            )
+        }
+
+        guard let progress = scanProgress else { return nil }
         return ScanOverview(
-            sourceName: displayName(for: summary.rootURL),
-            sourcePath: summary.rootURL.path,
-            diskUsage: ByteCount.string(summary.allocatedBytes),
-            fileCount: "\(summary.fileCount)",
-            folderCount: "\(summary.folderCount)",
-            duration: String(format: "%.1fs", summary.duration)
+            sourceName: displayName(for: progress.rootURL),
+            sourcePath: progress.rootURL.path,
+            diskUsage: ByteCount.string(progress.allocatedBytes),
+            fileCount: "\(progress.fileCount)",
+            folderCount: "\(progress.folderCount)",
+            duration: String(format: "%.1fs", progress.elapsedTime),
+            currentPath: progress.currentPath
         )
     }
 
@@ -255,6 +270,9 @@ final class AppModel: ObservableObject {
         scanCancellationSource = cancellationSource
         isScanning = true
         result = nil
+        partialScanSnapshot = nil
+        partialScanIssues = []
+        scanProgress = ScanProgress(rootURL: url, startedAt: Date())
         selectedID = nil
         syntheticOtherSelection = nil
         displayRootID = nil
@@ -262,19 +280,68 @@ final class AppModel: ObservableObject {
         currentScanURL = url
         statusText = "Scanning \(url.lastPathComponent.isEmpty ? url.path : url.lastPathComponent)..."
         let scanPreferences = scanPreferences
-        let scanRoot = scanRoot
+        let scanEvents = scanEvents
 
         scanTask = Task {
             let options = scanPreferences.scanOptions(cancellationSource: cancellationSource)
-            let scanResult = await Task.detached(priority: .userInitiated) {
-                scanRoot(url, options)
+            let scanResult = await Task.detached(priority: .userInitiated) { () -> ScanResult? in
+                var accumulator = ScanAccumulator()
+                var progress = ScanProgress(rootURL: url, startedAt: Date())
+                var lastPublish = Date.distantPast
+                var didPublishSnapshot = false
+
+                func publish(force: Bool = false) {
+                    guard let snapshot = accumulator.snapshot else { return }
+                    let now = Date()
+                    guard force || !didPublishSnapshot || now.timeIntervalSince(lastPublish) >= 0.25 else {
+                        return
+                    }
+
+                    lastPublish = now
+                    didPublishSnapshot = true
+                    let issues = accumulator.issues
+                    let progressSnapshot = progress
+                    Task { @MainActor in
+                        guard !cancellationSource.isCancelled,
+                              self.scanCancellationSource === cancellationSource,
+                              self.isScanning else {
+                            return
+                        }
+                        self.applyProgressiveScanUpdate(
+                            snapshot: snapshot,
+                            issues: issues,
+                            progress: progressSnapshot
+                        )
+                    }
+                }
+
+                scanEvents(url, options) { event in
+                    accumulator.consume(event)
+                    progress.consume(event)
+                    if let root = accumulator.snapshot?.root {
+                        progress.logicalBytes = root.logicalSize
+                        progress.allocatedBytes = root.allocatedSize
+                    }
+
+                    if case .finished = event {
+                        publish(force: true)
+                    } else {
+                        publish()
+                    }
+                }
+
+                return accumulator.result
             }.value
 
             guard !Task.isCancelled, !cancellationSource.isCancelled, scanCancellationSource === cancellationSource else {
                 return
             }
+            guard let scanResult else { return }
 
             result = scanResult
+            partialScanSnapshot = nil
+            partialScanIssues = []
+            scanProgress = nil
             displayRootID = scanResult.snapshot.rootID
             isScanning = false
             scanTask = nil
@@ -292,6 +359,9 @@ final class AppModel: ObservableObject {
         scanCancellationSource = nil
         isScanning = false
         result = nil
+        partialScanSnapshot = nil
+        partialScanIssues = []
+        scanProgress = nil
         selectedID = nil
         syntheticOtherSelection = nil
         displayRootID = nil
@@ -498,6 +568,20 @@ final class AppModel: ObservableObject {
         snapshot?.subtreeIDs(rootedAt: id).count ?? 0
     }
 
+    private func applyProgressiveScanUpdate(
+        snapshot: FileTreeSnapshot,
+        issues: [ScanIssue],
+        progress: ScanProgress
+    ) {
+        partialScanSnapshot = snapshot
+        partialScanIssues = issues
+        scanProgress = progress
+        if displayRootID == nil {
+            displayRootID = snapshot.rootID
+        }
+        statusText = "Scanning \(displayName(for: progress.rootURL)): \(ByteCount.string(progress.allocatedBytes))."
+    }
+
     private func share(_ bytes: Int64, of total: Int64) -> Double {
         guard total > 0 else { return 0 }
         return Double(bytes) / Double(total)
@@ -633,6 +717,64 @@ struct ScanOverview: Hashable {
     var fileCount: String
     var folderCount: String
     var duration: String
+    var currentPath: String?
+
+    init(
+        sourceName: String,
+        sourcePath: String,
+        diskUsage: String,
+        fileCount: String,
+        folderCount: String,
+        duration: String,
+        currentPath: String? = nil
+    ) {
+        self.sourceName = sourceName
+        self.sourcePath = sourcePath
+        self.diskUsage = diskUsage
+        self.fileCount = fileCount
+        self.folderCount = folderCount
+        self.duration = duration
+        self.currentPath = currentPath
+    }
+}
+
+struct ScanProgress: Hashable, Sendable {
+    var rootURL: URL
+    var startedAt: Date
+    var fileCount = 0
+    var folderCount = 0
+    var logicalBytes: Int64 = 0
+    var allocatedBytes: Int64 = 0
+    var currentPath: String?
+
+    var elapsedTime: TimeInterval {
+        Date().timeIntervalSince(startedAt)
+    }
+
+    mutating func consume(_ event: ScanEvent) {
+        switch event {
+        case let .started(root, startedAt):
+            rootURL = root
+            self.startedAt = startedAt
+            fileCount = 0
+            folderCount = 0
+            logicalBytes = 0
+            allocatedBytes = 0
+            currentPath = root.path
+        case let .nodeDiscovered(node):
+            currentPath = node.url?.path
+            switch node.kind {
+            case .directory, .package:
+                folderCount += 1
+            case .file, .symlink, .other:
+                fileCount += 1
+            }
+        case let .directoryFinished(node):
+            currentPath = node.url?.path
+        case .issue, .finished:
+            break
+        }
+    }
 }
 
 enum SidebarInsightMode: String, CaseIterable, Hashable, Identifiable {

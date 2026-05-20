@@ -754,35 +754,33 @@ final class AppModelNavigationTests: XCTestCase {
             try? FileManager.default.removeItem(at: root)
         }
 
-        model.scanRoot = { url, options in
+        model.scanEvents = { url, options, receive in
+            receive(.started(root: url.standardizedFileURL, startedAt: Date()))
             while options.cancellationSource?.isCancelled == false {
                 Thread.sleep(forTimeInterval: 0.001)
             }
 
-            return ScanResult(
-                snapshot: FileTreeSnapshot(
-                    nodes: [
-                        FileNode(
-                            id: 0,
-                            parentID: nil,
-                            name: url.lastPathComponent,
-                            url: url,
-                            kind: .directory,
-                            logicalSize: 1,
-                            allocatedSize: 1
-                        )
-                    ],
-                    rootID: 0
-                ),
-                summary: ScanSummary(
-                    rootURL: url,
-                    fileCount: 1,
-                    folderCount: 1,
-                    logicalBytes: 1,
-                    allocatedBytes: 1,
-                    duration: 0
-                ),
-                issues: []
+            let node = FileNode(
+                id: 0,
+                parentID: nil,
+                name: url.lastPathComponent,
+                url: url,
+                kind: .directory,
+                logicalSize: 1,
+                allocatedSize: 1
+            )
+            receive(.nodeDiscovered(node))
+            receive(
+                .finished(
+                    ScanSummary(
+                        rootURL: url,
+                        fileCount: 1,
+                        folderCount: 1,
+                        logicalBytes: 1,
+                        allocatedBytes: 1,
+                        duration: 0
+                    )
+                )
             )
         }
 
@@ -798,6 +796,60 @@ final class AppModelNavigationTests: XCTestCase {
         XCTAssertNil(model.selectedID)
         XCTAssertNil(model.displayRootID)
         XCTAssertEqual(model.statusText, "Cancelled scanning \(root.lastPathComponent).")
+    }
+
+    func testScanPublishesProgressiveSnapshotBeforeFinish() async throws {
+        let model = AppModel()
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer {
+            try? FileManager.default.removeItem(at: root)
+        }
+
+        model.scanEvents = { url, _, receive in
+            receive(.started(root: url.standardizedFileURL, startedAt: Date()))
+            let scanningRoot = FileNode(
+                id: 0,
+                parentID: nil,
+                name: url.lastPathComponent,
+                url: url,
+                kind: .directory,
+                logicalSize: 0,
+                allocatedSize: 0,
+                scanState: .scanning
+            )
+            receive(.nodeDiscovered(scanningRoot))
+            Thread.sleep(forTimeInterval: 0.35)
+            var completeRoot = scanningRoot
+            completeRoot.scanState = .complete
+            receive(.directoryFinished(completeRoot))
+            receive(
+                .finished(
+                    ScanSummary(
+                        rootURL: url,
+                        fileCount: 0,
+                        folderCount: 1,
+                        logicalBytes: 0,
+                        allocatedBytes: 0,
+                        duration: 0.35
+                    )
+                )
+            )
+        }
+
+        model.scan(root)
+        await waitForProgressiveSnapshot(model)
+
+        XCTAssertTrue(model.isScanning)
+        XCTAssertNil(model.result)
+        XCTAssertEqual(model.snapshot?.rootID, 0)
+        XCTAssertEqual(model.displayRootID, 0)
+
+        await waitForScanResult(model)
+
+        XCTAssertFalse(model.isScanning)
+        XCTAssertEqual(model.result?.summary.folderCount, 1)
     }
 
     func testNavigateToBreadcrumbClearsExpandedTreemapNodeIDs() {
@@ -982,6 +1034,13 @@ final class AppModelNavigationTests: XCTestCase {
     private func waitForScanResult(_ model: AppModel, timeout: TimeInterval = 2) async {
         let deadline = Date().addingTimeInterval(timeout)
         while model.result == nil && Date() < deadline {
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+    }
+
+    private func waitForProgressiveSnapshot(_ model: AppModel, timeout: TimeInterval = 2) async {
+        let deadline = Date().addingTimeInterval(timeout)
+        while (model.snapshot == nil || model.result != nil) && Date() < deadline {
             try? await Task.sleep(nanoseconds: 10_000_000)
         }
     }

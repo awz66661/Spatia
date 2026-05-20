@@ -69,6 +69,20 @@ private struct SidebarSourceSummaryView: View {
                     .lineLimit(2)
                     .truncationMode(.middle)
                     .textSelection(.enabled)
+
+                if let currentPath = overview.currentPath {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Scanning")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                        Text(currentPath)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                            .truncationMode(.middle)
+                            .textSelection(.enabled)
+                    }
+                }
             }
         } else if let currentScanURL {
             VStack(alignment: .leading, spacing: 8) {
