@@ -27,6 +27,7 @@ Spatia
 - `RecursiveTreemapBuilder` builds 2-3 visible levels from a `FileTreeSnapshot`.
 - `SquarifiedTreemapLayout` supports readability-first weighting and a SpaceSniffer-style alternating orientation policy.
 - `FileCategoryClassifier` maps scanner metadata, UTType hints, extensions, and protected paths into stable visual categories.
+- `FileTreeInsights` derives current-view largest-file and category summaries from immutable snapshots without changing scanner state.
 - `MainWindowView` uses a native SwiftUI `NavigationSplitView` shell with the system sidebar toggle, a full-height material sidebar, and restrained glass only on content overlays such as the selected-item inspector.
 - `PathRiskPolicy` centralizes path risk classification for scanner flags, category classification, UI risk state, and trash safety decisions.
 - `MacActions` contains macOS-specific actions such as Quick Look, reveal in Finder, copy path, and selected-item Move to Trash.
@@ -48,6 +49,7 @@ SwiftUI NavigationSplitView shell
 User chooses source
   -> FileScanner scans selected directory
   -> FileTreeSnapshot stores nodes and aggregate sizes
+  -> FileTreeInsights derives sidebar summaries for the current display root
   -> RecursiveTreemapBuilder chooses visible depth and child containment
   -> SquarifiedTreemapLayout converts siblings into readable-weighted tiles
   -> TreemapNSView draws tiles and handles hit testing

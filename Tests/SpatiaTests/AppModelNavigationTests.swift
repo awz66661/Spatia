@@ -155,6 +155,111 @@ final class AppModelNavigationTests: XCTestCase {
         ])
     }
 
+    func testLargestDescendantFileSummariesAreScopedAndSortedByAllocatedSize() {
+        let model = AppModel()
+        model.result = ScanResult(
+            snapshot: sidebarSnapshot(),
+            summary: ScanSummary(
+                rootURL: URL(fileURLWithPath: "/tmp/root", isDirectory: true),
+                fileCount: 2,
+                folderCount: 3,
+                logicalBytes: 100,
+                allocatedBytes: 100,
+                duration: 1
+            ),
+            issues: []
+        )
+        model.displayRootID = 0
+
+        XCTAssertEqual(model.largestDescendantFileSummaries.map(\.id), [5, 4, 3])
+        XCTAssertEqual(model.largestDescendantFileSummaries.map(\.relativePath), [
+            "large/large.bin",
+            "medium/medium.bin",
+            "small.txt"
+        ])
+        XCTAssertEqual(model.largestDescendantFileSummaries.map(\.shareText), ["50%", "30%", "20%"])
+
+        model.displayRootID = 1
+
+        XCTAssertEqual(model.largestDescendantFileSummaries.map(\.id), [4])
+        XCTAssertEqual(model.largestDescendantFileSummaries.first?.shareText, "100%")
+    }
+
+    func testCategoryUsageSummariesAreScopedToDisplayRoot() {
+        let model = AppModel()
+        model.result = ScanResult(
+            snapshot: sidebarSnapshot(),
+            summary: ScanSummary(
+                rootURL: URL(fileURLWithPath: "/tmp/root", isDirectory: true),
+                fileCount: 2,
+                folderCount: 3,
+                logicalBytes: 100,
+                allocatedBytes: 100,
+                duration: 1
+            ),
+            issues: []
+        )
+        model.displayRootID = 0
+
+        let rootUsage = Dictionary(uniqueKeysWithValues: model.categoryUsageSummaries.map { ($0.category, $0) })
+        XCTAssertEqual(model.categoryUsageSummaries.reduce(Int64(0)) { $0 + $1.allocatedBytes }, 100)
+        XCTAssertEqual(rootUsage[.other]?.allocatedBytes, 80)
+        XCTAssertEqual(rootUsage[.other]?.itemCount, 2)
+        XCTAssertEqual(rootUsage[.other]?.shareText, "80%")
+        XCTAssertEqual(rootUsage[.document]?.allocatedBytes, 20)
+        XCTAssertEqual(rootUsage[.document]?.itemCount, 1)
+        XCTAssertEqual(rootUsage[.document]?.shareText, "20%")
+
+        model.displayRootID = 2
+
+        XCTAssertEqual(model.categoryUsageSummaries.first?.allocatedBytes, 50)
+        XCTAssertEqual(model.categoryUsageSummaries.first?.itemCount, 1)
+    }
+
+    func testOpenInsightItemSelectsDeepNodeAndExpandsParentPathWithoutEnteringDirectory() {
+        let model = AppModel()
+        model.result = ScanResult(
+            snapshot: sidebarSnapshot(),
+            summary: ScanSummary(
+                rootURL: URL(fileURLWithPath: "/tmp/root", isDirectory: true),
+                fileCount: 2,
+                folderCount: 3,
+                logicalBytes: 100,
+                allocatedBytes: 100,
+                duration: 1
+            ),
+            issues: []
+        )
+        model.displayRootID = 0
+
+        model.openInsightItem(5)
+
+        XCTAssertEqual(model.displayRootID, 0)
+        XCTAssertEqual(model.selectedID, 5)
+        XCTAssertEqual(model.expandedTreemapNodeIDs, [2])
+    }
+
+    func testSelectedNodeDetailIncludesUsageShares() {
+        let model = AppModel()
+        model.result = ScanResult(
+            snapshot: sidebarSnapshot(),
+            summary: ScanSummary(
+                rootURL: URL(fileURLWithPath: "/tmp/root", isDirectory: true),
+                fileCount: 2,
+                folderCount: 3,
+                logicalBytes: 100,
+                allocatedBytes: 100,
+                duration: 1
+            ),
+            issues: []
+        )
+        model.displayRootID = 2
+        model.selectedID = 5
+
+        XCTAssertEqual(model.selectedNodeDetail?.shareOfCurrentView, "100%")
+        XCTAssertEqual(model.selectedNodeDetail?.shareOfScan, "50%")
+    }
+
     func testOpenSidebarItemEntersDirectoriesAndClearsSelection() {
         let model = AppModel()
         model.result = ScanResult(

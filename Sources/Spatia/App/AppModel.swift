@@ -11,6 +11,7 @@ final class AppModel: ObservableObject {
     @Published var statusText = "Choose a folder to scan."
     @Published var currentScanURL: URL?
     @Published var scanPreferences = ScanPreferences()
+    @Published var sidebarInsightMode: SidebarInsightMode = .here
     @Published private var syntheticOtherSelection: SyntheticOtherSelection?
     @Published private var expandedTreemapNodeIDsStorage: Set<NodeID> = []
 
@@ -108,16 +109,58 @@ final class AppModel: ObservableObject {
             }
     }
 
+    var largestDescendantFileSummaries: [DescendantFileSummary] {
+        guard let snapshot, let displayRoot else { return [] }
+
+        return snapshot.largestDescendantFiles(rootedAt: displayRoot.id, limit: 16)
+            .compactMap { usage in
+                guard let node = snapshot[usage.nodeID] else { return nil }
+                return DescendantFileSummary(
+                    id: node.id,
+                    name: displayName(for: node),
+                    relativePath: snapshot.relativePath(from: displayRoot.id, to: node.id) ?? displayName(for: node),
+                    category: FileCategoryClassifier.category(for: node),
+                    categoryName: displayName(for: FileCategoryClassifier.category(for: node)),
+                    sizeText: ByteCount.string(usage.allocatedBytes),
+                    shareText: percentageString(usage.shareOfRoot),
+                    shareOfCurrentRoot: usage.shareOfRoot,
+                    path: node.url?.path
+                )
+            }
+    }
+
+    var categoryUsageSummaries: [CategoryUsageSummary] {
+        guard let snapshot, let displayRoot else { return [] }
+
+        return snapshot.categoryUsage(rootedAt: displayRoot.id)
+            .map { usage in
+                CategoryUsageSummary(
+                    category: usage.category,
+                    name: displayName(for: usage.category),
+                    sizeText: ByteCount.string(usage.allocatedBytes),
+                    itemCountText: "\(usage.itemCount)",
+                    shareText: percentageString(usage.shareOfRoot),
+                    allocatedBytes: usage.allocatedBytes,
+                    itemCount: usage.itemCount,
+                    shareOfCurrentRoot: usage.shareOfRoot
+                )
+            }
+    }
+
     var selectedNodeDetail: SelectionDetail? {
         guard let node = selectedNode else { return nil }
         let trashState = trashActionState(for: node)
         let risk = pathRiskPolicy.risk(for: node)
+        let currentRootSize = displayRoot?.allocatedSize ?? 0
+        let scanRootSize = snapshot?.root?.allocatedSize ?? 0
         return SelectionDetail(
             id: node.id,
             name: displayName(for: node),
             kind: displayName(for: node.kind),
             diskUsage: ByteCount.string(node.allocatedSize),
             fileSize: ByteCount.string(node.logicalSize),
+            shareOfCurrentView: percentageString(share(node.allocatedSize, of: currentRootSize)),
+            shareOfScan: percentageString(share(node.allocatedSize, of: scanRootSize)),
             category: displayName(for: FileCategoryClassifier.category(for: node)),
             modified: node.modifiedAt?.formatted(date: .abbreviated, time: .shortened),
             path: node.url?.path,
@@ -321,6 +364,11 @@ final class AppModel: ObservableObject {
         }
     }
 
+    func openInsightItem(_ id: NodeID) {
+        guard id != syntheticOtherNodeID, snapshot?[id] != nil else { return }
+        select(id)
+    }
+
     func quickLookSelected() {
         guard let selectedID else { return }
         quickLook(selectedID)
@@ -450,6 +498,27 @@ final class AppModel: ObservableObject {
         snapshot?.subtreeIDs(rootedAt: id).count ?? 0
     }
 
+    private func share(_ bytes: Int64, of total: Int64) -> Double {
+        guard total > 0 else { return 0 }
+        return Double(bytes) / Double(total)
+    }
+
+    private func percentageString(_ share: Double) -> String {
+        guard share > 0 else { return "0%" }
+
+        let percent = share * 100
+        if percent < 0.1 {
+            return "<0.1%"
+        }
+        if percent >= 99.95 {
+            return "100%"
+        }
+        if percent >= 10 || percent.rounded() == percent {
+            return String(format: "%.0f%%", percent)
+        }
+        return String(format: "%.1f%%", percent)
+    }
+
     private func handleTrashResult(_ result: TrashActionResult, nodeID: NodeID, nodeName: String) {
         switch result {
         case .moved:
@@ -566,6 +635,25 @@ struct ScanOverview: Hashable {
     var duration: String
 }
 
+enum SidebarInsightMode: String, CaseIterable, Hashable, Identifiable {
+    case here
+    case files
+    case types
+
+    var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .here:
+            return "Here"
+        case .files:
+            return "Files"
+        case .types:
+            return "Types"
+        }
+    }
+}
+
 struct ScanPreferences: Hashable {
     var expandPackages = false
     var includeHiddenFiles = true
@@ -599,12 +687,39 @@ struct DisplayRootChildSummary: Identifiable, Hashable {
     var isContainer: Bool
 }
 
+struct DescendantFileSummary: Identifiable, Hashable {
+    var id: NodeID
+    var name: String
+    var relativePath: String
+    var category: FileCategory
+    var categoryName: String
+    var sizeText: String
+    var shareText: String
+    var shareOfCurrentRoot: Double
+    var path: String?
+}
+
+struct CategoryUsageSummary: Identifiable, Hashable {
+    var category: FileCategory
+    var name: String
+    var sizeText: String
+    var itemCountText: String
+    var shareText: String
+    var allocatedBytes: Int64
+    var itemCount: Int
+    var shareOfCurrentRoot: Double
+
+    var id: FileCategory { category }
+}
+
 struct SelectionDetail: Identifiable, Hashable {
     var id: NodeID
     var name: String
     var kind: String
     var diskUsage: String
     var fileSize: String
+    var shareOfCurrentView: String
+    var shareOfScan: String
     var category: String
     var modified: String?
     var path: String?

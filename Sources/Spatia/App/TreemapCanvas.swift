@@ -402,34 +402,6 @@ final class TreemapNSView: NSView {
     }
 
     private func fillColor(for tile: Tile) -> NSColor {
-        if tile.flags.contains(.systemProtected) || tile.flags.contains(.permissionDenied) {
-            return NSColor.systemGray.withAlphaComponent(0.28)
-        }
-
-        let base: NSColor = switch tile.category {
-        case .video:
-            .systemOrange
-        case .image:
-            .systemGreen
-        case .audio:
-            .systemPurple
-        case .archive:
-            .systemYellow
-        case .appPackage:
-            .systemIndigo
-        case .document:
-            .systemBlue
-        case .source:
-            .systemTeal
-        case .cache:
-            .systemGray
-        case .system:
-            .systemGray
-        case .other:
-            tile.kind == .directory ? .systemCyan : .systemMint
-        }
-
-        let alpha = max(0.18, 0.42 - CGFloat(tile.depth) * 0.055)
-        return base.withAlphaComponent(alpha)
+        CategoryPalette.nsColor(for: tile.category, kind: tile.kind, flags: tile.flags, depth: tile.depth)
     }
 }
