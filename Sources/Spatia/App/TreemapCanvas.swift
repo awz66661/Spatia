@@ -44,6 +44,27 @@ private struct MouseDownTarget {
     }
 }
 
+private struct SnapshotLayoutIdentity: Hashable {
+    var rootID: NodeID
+    var nodeCount: Int
+    var storageAddress: UInt
+}
+
+private struct TreemapLayoutCacheKey: Hashable {
+    var snapshotIdentity: SnapshotLayoutIdentity
+    var rootID: NodeID
+    var expandedNodeIDs: Set<NodeID>
+    var boundsMinX: Double
+    var boundsMinY: Double
+    var boundsWidth: Double
+    var boundsHeight: Double
+}
+
+private struct TreemapLayoutCache {
+    var key: TreemapLayoutCacheKey
+    var tiles: [Tile]
+}
+
 final class TreemapNSView: NSView {
     var snapshot: FileTreeSnapshot? {
         didSet { needsDisplay = true }
@@ -72,6 +93,7 @@ final class TreemapNSView: NSView {
     var onSyntheticOtherSelect: ((Int64) -> Void)?
 
     private var renderedTiles: [Tile] = []
+    private var layoutCache: TreemapLayoutCache?
     private var trackingArea: NSTrackingArea?
     private var hoveredTile: Tile? {
         didSet {
@@ -145,13 +167,15 @@ final class TreemapNSView: NSView {
 
         guard let snapshot, let rootID else {
             renderedTiles = []
+            layoutCache = nil
             return
         }
 
-        renderedTiles = builder.build(
+        let layoutBounds = bounds.insetBy(dx: 3, dy: 3)
+        renderedTiles = cachedTiles(
             snapshot: snapshot,
             rootID: rootID,
-            in: bounds.insetBy(dx: 3, dy: 3),
+            in: layoutBounds,
             expandedNodeIDs: expandedNodeIDs
         )
 
@@ -215,6 +239,47 @@ final class TreemapNSView: NSView {
             return tile
         }
         return renderedTiles.first { $0.nodeID == pendingDoubleClickTarget.nodeID } ?? tile
+    }
+
+    private func cachedTiles(
+        snapshot: FileTreeSnapshot,
+        rootID: NodeID,
+        in bounds: CGRect,
+        expandedNodeIDs: Set<NodeID>
+    ) -> [Tile] {
+        let key = TreemapLayoutCacheKey(
+            snapshotIdentity: snapshotIdentity(for: snapshot),
+            rootID: rootID,
+            expandedNodeIDs: expandedNodeIDs,
+            boundsMinX: Double(bounds.minX),
+            boundsMinY: Double(bounds.minY),
+            boundsWidth: Double(bounds.width),
+            boundsHeight: Double(bounds.height)
+        )
+
+        if let layoutCache, layoutCache.key == key {
+            return layoutCache.tiles
+        }
+
+        let tiles = builder.build(
+            snapshot: snapshot,
+            rootID: rootID,
+            in: bounds,
+            expandedNodeIDs: expandedNodeIDs
+        )
+        layoutCache = TreemapLayoutCache(key: key, tiles: tiles)
+        return tiles
+    }
+
+    private func snapshotIdentity(for snapshot: FileTreeSnapshot) -> SnapshotLayoutIdentity {
+        let storageAddress = snapshot.nodes.withUnsafeBufferPointer { buffer in
+            buffer.baseAddress.map { UInt(bitPattern: $0) } ?? 0
+        }
+        return SnapshotLayoutIdentity(
+            rootID: snapshot.rootID,
+            nodeCount: snapshot.nodes.count,
+            storageAddress: storageAddress
+        )
     }
 
     private func draw(_ tile: Tile, in context: CGContext) {
