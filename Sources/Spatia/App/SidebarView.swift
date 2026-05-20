@@ -21,14 +21,13 @@ struct SidebarView: View {
                     .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 10, trailing: 14))
                 }
 
-                Section("Insights") {
-                    SidebarInsightsView()
-                }
+                SidebarPanelView()
 
                 if !model.permissionIssues.isEmpty {
-                    Section("Access") {
-                        PermissionSummaryView(issues: model.permissionIssues)
-                    }
+                    PermissionSummaryView(
+                        issues: model.permissionIssues,
+                        isExpanded: sectionBinding(.access)
+                    )
                 }
             }
             .listStyle(.sidebar)
@@ -47,6 +46,13 @@ struct SidebarView: View {
                 prompt: "Name, path, kind, or category"
             )
         }
+    }
+
+    private func sectionBinding(_ section: SidebarSection) -> Binding<Bool> {
+        Binding(
+            get: { model.expandedSidebarSections.contains(section) },
+            set: { model.setSidebarSection(section, isExpanded: $0) }
+        )
     }
 }
 
@@ -148,108 +154,142 @@ private struct SidebarMetricRow: View {
     }
 }
 
-private struct SidebarInsightsView: View {
+private struct SidebarPanelView: View {
     @EnvironmentObject private var model: AppModel
 
     var body: some View {
-        InsightModePicker(
-            selection: Binding(
-                get: { model.sidebarInsightMode },
-                set: { model.sidebarInsightMode = $0 }
-            )
-        )
-        .listRowInsets(EdgeInsets(top: 6, leading: 14, bottom: 7, trailing: 14))
+        if !trimmedSearchQuery.isEmpty {
+            Section("Search Results") {
+                searchContent
+            }
+        }
 
-        switch model.sidebarInsightMode {
-        case .here:
-            if model.isSidebarInsightLoading {
-                SidebarLoadingInsightView(text: "Loading largest items...")
-            } else if model.largestDisplayRootChildren.isEmpty {
-                SidebarEmptyInsightView(
-                    text: model.snapshot == nil
-                        ? "Scan a folder to browse its largest items."
-                        : "This location has no sizeable children."
-                )
-            } else {
-                ForEach(model.largestDisplayRootChildren) { item in
-                    SidebarLargestRow(
-                        item: item,
-                        isSelected: model.selectedID == item.id
-                    ) {
-                        model.openSidebarItem(item.id)
-                    }
-                    .listRowBackground(model.selectedID == item.id ? DesignTokens.selectedRowBackground : Color.clear)
-                }
+        Section {
+            DisclosureGroup(isExpanded: sectionBinding(.browse)) {
+                browseContent
+            } label: {
+                SidebarSectionLabel(title: "Browse", systemImage: "folder")
             }
-        case .files:
-            if model.isSidebarInsightLoading {
-                SidebarLoadingInsightView(text: "Loading large files...")
-            } else if model.largestDescendantFileSummaries.isEmpty {
-                SidebarEmptyInsightView(
-                    text: model.snapshot == nil
-                        ? "Scan a folder to find large files."
-                        : "This location has no sizeable files."
-                )
-            } else {
-                ForEach(model.largestDescendantFileSummaries) { item in
-                    SidebarDescendantFileRow(
-                        item: item,
-                        isSelected: model.selectedID == item.id
-                    ) {
-                        model.openInsightItem(item.id)
-                    }
-                    .listRowBackground(model.selectedID == item.id ? DesignTokens.selectedRowBackground : Color.clear)
-                }
+        }
+
+        Section {
+            DisclosureGroup(isExpanded: sectionBinding(.largestFiles)) {
+                largestFilesContent
+            } label: {
+                SidebarSectionLabel(title: "Largest Files", systemImage: "doc.text.magnifyingglass")
             }
-        case .types:
-            if model.isSidebarInsightLoading {
-                SidebarLoadingInsightView(text: "Loading type usage...")
-            } else if model.categoryUsageSummaries.isEmpty {
-                SidebarEmptyInsightView(
-                    text: model.snapshot == nil
-                        ? "Scan a folder to summarize types."
-                        : "This location has no sizeable type groups."
-                )
-            } else {
-                ForEach(model.categoryUsageSummaries) { item in
-                    SidebarCategoryUsageRow(item: item)
-                }
-            }
-        case .search:
-            if model.searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                SidebarEmptyInsightView(text: "Search names, paths, kinds, or categories in the current view.")
-            } else if model.isSearchLoading {
-                SidebarLoadingInsightView(text: "Searching...")
-            } else if model.searchResultSummaries.isEmpty {
-                SidebarEmptyInsightView(text: "No matches in the current view.")
-            } else {
-                ForEach(model.searchResultSummaries) { item in
-                    SidebarSearchResultRow(
-                        item: item,
-                        isSelected: model.selectedID == item.id
-                    ) {
-                        model.openInsightItem(item.id)
-                    }
-                    .listRowBackground(model.selectedID == item.id ? DesignTokens.selectedRowBackground : Color.clear)
-                }
+        }
+
+        Section {
+            DisclosureGroup(isExpanded: sectionBinding(.typeUsage)) {
+                typeUsageContent
+            } label: {
+                SidebarSectionLabel(title: "Type Usage", systemImage: "chart.pie")
             }
         }
     }
-}
 
-private struct InsightModePicker: View {
-    @Binding var selection: SidebarInsightMode
+    private var trimmedSearchQuery: String {
+        model.searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 
-    var body: some View {
-        Picker("Insight", selection: $selection) {
-            ForEach(SidebarInsightMode.allCases) { mode in
-                Text(mode.title)
-                    .tag(mode)
+    @ViewBuilder
+    private var searchContent: some View {
+        if model.isSearchLoading {
+            SidebarLoadingInsightView(text: "Searching...")
+        } else if model.searchResultSummaries.isEmpty {
+            SidebarEmptyInsightView(text: "No matches in the current view.")
+        } else {
+            ForEach(model.searchResultSummaries) { item in
+                SidebarSearchRow(
+                    item: item,
+                    isSelected: model.selectedID == item.id
+                ) {
+                    model.openInsightItem(item.id)
+                }
+                .listRowBackground(model.selectedID == item.id ? DesignTokens.selectedRowBackground : Color.clear)
             }
         }
-        .pickerStyle(.segmented)
-        .labelsHidden()
-        .controlSize(.small)
+    }
+
+    @ViewBuilder
+    private var browseContent: some View {
+        if model.isSidebarSectionLoading(.browse) {
+            SidebarLoadingInsightView(text: "Loading current view...")
+        } else if model.sidebarBrowseItems.isEmpty {
+            SidebarEmptyInsightView(
+                text: model.snapshot == nil
+                    ? "No scan yet."
+                    : "This location has no sizeable children."
+            )
+        } else {
+            ForEach(model.sidebarBrowseItems) { item in
+                SidebarBrowseRow(
+                    item: item,
+                    isSelected: model.selectedID == item.id
+                ) {
+                    model.openSidebarItem(item.id)
+                }
+                .listRowBackground(model.selectedID == item.id ? DesignTokens.selectedRowBackground : Color.clear)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var largestFilesContent: some View {
+        if model.isSidebarSectionLoading(.largestFiles) {
+            SidebarLoadingInsightView(text: "Loading large files...")
+        } else if model.sidebarLargestFileItems.isEmpty {
+            SidebarEmptyInsightView(
+                text: model.snapshot == nil
+                    ? "No scan yet."
+                    : "This location has no sizeable files."
+            )
+        } else {
+            ForEach(model.sidebarLargestFileItems) { item in
+                SidebarInsightFileRow(
+                    item: item,
+                    isSelected: model.selectedID == item.id
+                ) {
+                    model.openInsightItem(item.id)
+                }
+                .listRowBackground(model.selectedID == item.id ? DesignTokens.selectedRowBackground : Color.clear)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var typeUsageContent: some View {
+        if model.isSidebarSectionLoading(.typeUsage) {
+            SidebarLoadingInsightView(text: "Loading type usage...")
+        } else if model.sidebarCategoryUsageItems.isEmpty {
+            SidebarEmptyInsightView(
+                text: model.snapshot == nil
+                    ? "No scan yet."
+                    : "This location has no sizeable type groups."
+            )
+        } else {
+            ForEach(model.sidebarCategoryUsageItems) { item in
+                SidebarCategoryRow(item: item)
+            }
+        }
+    }
+
+    private func sectionBinding(_ section: SidebarSection) -> Binding<Bool> {
+        Binding(
+            get: { model.expandedSidebarSections.contains(section) },
+            set: { model.setSidebarSection(section, isExpanded: $0) }
+        )
+    }
+}
+
+private struct SidebarSectionLabel: View {
+    var title: String
+    var systemImage: String
+
+    var body: some View {
+        Label(title, systemImage: systemImage)
+            .font(.callout)
     }
 }
 
@@ -279,8 +319,8 @@ private struct SidebarLoadingInsightView: View {
     }
 }
 
-private struct SidebarLargestRow: View {
-    var item: DisplayRootChildSummary
+private struct SidebarBrowseRow: View {
+    var item: SidebarItemSummary
     var isSelected: Bool
     var action: () -> Void
 
@@ -322,7 +362,7 @@ private struct SidebarLargestRow: View {
     }
 }
 
-private struct SidebarDescendantFileRow: View {
+private struct SidebarInsightFileRow: View {
     var item: DescendantFileSummary
     var isSelected: Bool
     var action: () -> Void
@@ -372,7 +412,7 @@ private struct SidebarDescendantFileRow: View {
     }
 }
 
-private struct SidebarCategoryUsageRow: View {
+private struct SidebarCategoryRow: View {
     var item: CategoryUsageSummary
 
     var body: some View {
@@ -413,7 +453,7 @@ private struct SidebarCategoryUsageRow: View {
     }
 }
 
-private struct SidebarSearchResultRow: View {
+private struct SidebarSearchRow: View {
     var item: SearchResultSummary
     var isSelected: Bool
     var action: () -> Void
@@ -471,33 +511,36 @@ private struct CategorySwatch: View {
 
 private struct PermissionSummaryView: View {
     var issues: [ScanIssue]
+    @Binding var isExpanded: Bool
 
     var body: some View {
-        DisclosureGroup {
-            VStack(alignment: .leading, spacing: 8) {
-                ForEach(Array(issues.enumerated()), id: \.offset) { _, issue in
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(issue.url.path)
-                            .font(.caption)
-                            .textSelection(.enabled)
-                            .lineLimit(3)
-                        Text(issue.kind == .permissionDenied ? "Full Disk Access may be required." : issue.message)
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(2)
+        Section {
+            DisclosureGroup(isExpanded: $isExpanded) {
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(Array(issues.enumerated()), id: \.offset) { _, issue in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(issue.url.path)
+                                .font(.caption)
+                                .textSelection(.enabled)
+                                .lineLimit(3)
+                            Text(issue.kind == .permissionDenied ? "Full Disk Access may be required." : issue.message)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(2)
+                        }
                     }
-                }
 
-                Text("macOS protects some locations. You can keep using partial results or grant Full Disk Access in System Settings.")
-                    .font(.caption2)
+                    Text("Some locations were skipped.")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.top, 6)
+            } label: {
+                Label("\(issues.count) unreadable location\(issues.count == 1 ? "" : "s")", systemImage: "lock")
+                    .font(.callout)
                     .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
             }
-            .padding(.top, 6)
-        } label: {
-            Label("\(issues.count) unreadable location\(issues.count == 1 ? "" : "s")", systemImage: "lock")
-                .font(.callout)
-                .foregroundStyle(.secondary)
         }
     }
 }

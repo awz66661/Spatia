@@ -23,8 +23,12 @@ final class AppModel: ObservableObject {
     @Published var statusText = "Choose a folder to scan."
     @Published var currentScanURL: URL?
     @Published var scanPreferences = ScanPreferences()
-    @Published var sidebarInsightMode: SidebarInsightMode = .here {
+    @Published var expandedSidebarSections: Set<SidebarSection> = Set([.browse, .largestFiles]) {
         didSet {
+            let lazyDerivedSections: Set<SidebarSection> = [.largestFiles, .typeUsage]
+            guard oldValue.intersection(lazyDerivedSections) != expandedSidebarSections.intersection(lazyDerivedSections) else {
+                return
+            }
             scheduleSidebarDerivedRefresh(force: true)
         }
     }
@@ -35,7 +39,7 @@ final class AppModel: ObservableObject {
         }
     }
 
-    @Published private(set) var sidebarDerivedState = SidebarDerivedState.empty(mode: .here)
+    @Published private(set) var sidebarPanelState = SidebarPanelState.empty
     @Published private(set) var searchState = SearchState.empty(query: "")
     @Published private var partialScanSnapshot: FileTreeSnapshot? {
         didSet {
@@ -149,24 +153,20 @@ final class AppModel: ObservableObject {
         )
     }
 
-    var largestDisplayRootChildren: [DisplayRootChildSummary] {
-        sidebarDerivedState.largestDisplayRootChildren
+    var sidebarBrowseItems: [SidebarItemSummary] {
+        sidebarPanelState.browseItems
     }
 
-    var largestDescendantFileSummaries: [DescendantFileSummary] {
-        sidebarDerivedState.largestDescendantFileSummaries
+    var sidebarLargestFileItems: [DescendantFileSummary] {
+        sidebarPanelState.largestFileItems
     }
 
-    var categoryUsageSummaries: [CategoryUsageSummary] {
-        sidebarDerivedState.categoryUsageSummaries
+    var sidebarCategoryUsageItems: [CategoryUsageSummary] {
+        sidebarPanelState.categoryUsageItems
     }
 
     var searchResultSummaries: [SearchResultSummary] {
         searchState.results
-    }
-
-    var isSidebarInsightLoading: Bool {
-        sidebarDerivedState.isLoading && sidebarDerivedState.mode == sidebarInsightMode
     }
 
     var isSearchLoading: Bool {
@@ -606,17 +606,27 @@ final class AppModel: ObservableObject {
         expandedTreemapNodeIDsStorage = []
     }
 
-    private func scheduleSidebarDerivedRefresh(force: Bool) {
-        activeDerivedTask?.cancel()
+    func toggleSidebarSection(_ section: SidebarSection) {
+        setSidebarSection(section, isExpanded: !expandedSidebarSections.contains(section))
+    }
 
-        guard let snapshot, let displayRoot else {
-            sidebarDerivedState = .empty(mode: sidebarInsightMode)
-            return
+    func setSidebarSection(_ section: SidebarSection, isExpanded: Bool) {
+        if isExpanded {
+            expandedSidebarSections.insert(section)
+        } else {
+            expandedSidebarSections.remove(section)
         }
+    }
 
-        let mode = sidebarInsightMode
-        guard mode != .search else {
-            sidebarDerivedState = .empty(mode: mode)
+    func isSidebarSectionLoading(_ section: SidebarSection) -> Bool {
+        sidebarPanelState.loadingSections.contains(section)
+    }
+
+    private func scheduleSidebarDerivedRefresh(force: Bool) {
+        guard let snapshot, let displayRoot else {
+            activeDerivedTask?.cancel()
+            activeDerivedTask = nil
+            sidebarPanelState = .empty
             return
         }
 
@@ -626,24 +636,26 @@ final class AppModel: ObservableObject {
         }
         lastProgressiveDerivedRefresh = now
 
+        activeDerivedTask?.cancel()
         let key = SnapshotDerivedKey(snapshot: snapshot, displayRootID: displayRoot.id)
+        let sections = sidebarSectionsToBuild()
         derivedGeneration += 1
         let generation = derivedGeneration
-        sidebarDerivedState = .loading(mode: mode)
+        sidebarPanelState = .loading(sections: sections)
 
-        activeDerivedTask = Task { [snapshot, displayRoot, mode, key, generation] in
+        activeDerivedTask = Task { [snapshot, displayRoot, sections, key, generation] in
             let state = await Task.detached(priority: .utility) {
-                SidebarDerivedBuilder.build(mode: mode, snapshot: snapshot, displayRoot: displayRoot)
+                SidebarDerivedBuilder.build(sections: sections, snapshot: snapshot, displayRoot: displayRoot)
             }.value
 
             guard !Task.isCancelled,
                   generation == derivedGeneration,
-                  mode == sidebarInsightMode,
+                  sections == sidebarSectionsToBuild(),
                   currentSnapshotDerivedKey() == key else {
                 return
             }
 
-            sidebarDerivedState = state
+            sidebarPanelState = state
             activeDerivedTask = nil
         }
     }
@@ -701,9 +713,20 @@ final class AppModel: ObservableObject {
         derivedGeneration += 1
         searchGeneration += 1
         searchIndexCache = nil
-        sidebarDerivedState = .empty(mode: sidebarInsightMode)
+        sidebarPanelState = .empty
         searchState = .empty(query: searchQuery)
         lastProgressiveDerivedRefresh = Date.distantPast
+    }
+
+    private func sidebarSectionsToBuild() -> Set<SidebarSection> {
+        var sections: Set<SidebarSection> = [.browse]
+        if expandedSidebarSections.contains(.largestFiles) {
+            sections.insert(.largestFiles)
+        }
+        if expandedSidebarSections.contains(.typeUsage) {
+            sections.insert(.typeUsage)
+        }
+        return sections
     }
 
     private func currentSnapshotDerivedKey() -> SnapshotDerivedKey? {
@@ -968,38 +991,27 @@ private struct SearchBuildOutput: Sendable {
 
 private enum SidebarDerivedBuilder {
     static func build(
-        mode: SidebarInsightMode,
+        sections: Set<SidebarSection>,
         snapshot: FileTreeSnapshot,
         displayRoot: FileNode
-    ) -> SidebarDerivedState {
-        switch mode {
-        case .here:
-            return SidebarDerivedState(
-                mode: mode,
-                isLoading: false,
-                largestDisplayRootChildren: buildLargestDisplayRootChildren(snapshot: snapshot, displayRoot: displayRoot)
-            )
-        case .files:
-            return SidebarDerivedState(
-                mode: mode,
-                isLoading: false,
-                largestDescendantFileSummaries: buildLargestDescendantFileSummaries(snapshot: snapshot, displayRoot: displayRoot)
-            )
-        case .types:
-            return SidebarDerivedState(
-                mode: mode,
-                isLoading: false,
-                categoryUsageSummaries: buildCategoryUsageSummaries(snapshot: snapshot, displayRoot: displayRoot)
-            )
-        case .search:
-            return .empty(mode: mode)
-        }
+    ) -> SidebarPanelState {
+        SidebarPanelState(
+            browseItems: buildBrowseItems(snapshot: snapshot, displayRoot: displayRoot),
+            largestFileItems: sections.contains(.largestFiles)
+                ? buildLargestDescendantFileSummaries(snapshot: snapshot, displayRoot: displayRoot)
+                : [],
+            categoryUsageItems: sections.contains(.typeUsage)
+                ? buildCategoryUsageSummaries(snapshot: snapshot, displayRoot: displayRoot)
+                : [],
+            loadingSections: [],
+            errors: [:]
+        )
     }
 
-    private static func buildLargestDisplayRootChildren(
+    private static func buildBrowseItems(
         snapshot: FileTreeSnapshot,
         displayRoot: FileNode
-    ) -> [DisplayRootChildSummary] {
+    ) -> [SidebarItemSummary] {
         snapshot.children(of: displayRoot.id)
             .filter { $0.allocatedSize > 0 }
             .sorted { lhs, rhs in
@@ -1008,9 +1020,8 @@ private enum SidebarDerivedBuilder {
                 }
                 return lhs.allocatedSize > rhs.allocatedSize
             }
-            .prefix(8)
             .map { node in
-                DisplayRootChildSummary(
+                SidebarItemSummary(
                     id: node.id,
                     name: DerivedFormatting.displayName(for: node),
                     kind: DerivedFormatting.displayName(for: node.kind),
@@ -1163,33 +1174,29 @@ private enum DerivedFormatting {
     }
 }
 
-struct SidebarDerivedState: Hashable, Sendable {
-    var mode: SidebarInsightMode
-    var isLoading: Bool
-    var largestDisplayRootChildren: [DisplayRootChildSummary]
-    var largestDescendantFileSummaries: [DescendantFileSummary]
-    var categoryUsageSummaries: [CategoryUsageSummary]
+struct SidebarPanelState: Hashable, Sendable {
+    var browseItems: [SidebarItemSummary]
+    var largestFileItems: [DescendantFileSummary]
+    var categoryUsageItems: [CategoryUsageSummary]
+    var loadingSections: Set<SidebarSection>
+    var errors: [SidebarSection: String]
 
-    init(
-        mode: SidebarInsightMode,
-        isLoading: Bool,
-        largestDisplayRootChildren: [DisplayRootChildSummary] = [],
-        largestDescendantFileSummaries: [DescendantFileSummary] = [],
-        categoryUsageSummaries: [CategoryUsageSummary] = []
-    ) {
-        self.mode = mode
-        self.isLoading = isLoading
-        self.largestDisplayRootChildren = largestDisplayRootChildren
-        self.largestDescendantFileSummaries = largestDescendantFileSummaries
-        self.categoryUsageSummaries = categoryUsageSummaries
-    }
+    static let empty = SidebarPanelState(
+        browseItems: [],
+        largestFileItems: [],
+        categoryUsageItems: [],
+        loadingSections: [],
+        errors: [:]
+    )
 
-    static func empty(mode: SidebarInsightMode) -> SidebarDerivedState {
-        SidebarDerivedState(mode: mode, isLoading: false)
-    }
-
-    static func loading(mode: SidebarInsightMode) -> SidebarDerivedState {
-        SidebarDerivedState(mode: mode, isLoading: true)
+    static func loading(sections: Set<SidebarSection>) -> SidebarPanelState {
+        SidebarPanelState(
+            browseItems: [],
+            largestFileItems: [],
+            categoryUsageItems: [],
+            loadingSections: sections,
+            errors: [:]
+        )
     }
 }
 
@@ -1278,26 +1285,13 @@ struct ScanProgress: Hashable, Sendable {
     }
 }
 
-enum SidebarInsightMode: String, CaseIterable, Hashable, Identifiable, Sendable {
-    case here
-    case files
-    case types
-    case search
+enum SidebarSection: String, CaseIterable, Hashable, Identifiable, Sendable {
+    case browse
+    case largestFiles
+    case typeUsage
+    case access
 
     var id: Self { self }
-
-    var title: String {
-        switch self {
-        case .here:
-            return "Here"
-        case .files:
-            return "Files"
-        case .types:
-            return "Types"
-        case .search:
-            return "Search"
-        }
-    }
 }
 
 struct ScanPreferences: Hashable {
@@ -1324,7 +1318,7 @@ struct OtherSmallFilesDetail: Hashable {
     var displayRootName: String?
 }
 
-struct DisplayRootChildSummary: Identifiable, Hashable, Sendable {
+struct SidebarItemSummary: Identifiable, Hashable, Sendable {
     var id: NodeID
     var name: String
     var kind: String
