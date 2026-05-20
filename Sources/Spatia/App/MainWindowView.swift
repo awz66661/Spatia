@@ -8,16 +8,10 @@ enum DesignTokens {
     static let rowIconColumnWidth: CGFloat = 24
     static let detailMinWidth: CGFloat = 760
     static let treemapInset: CGFloat = 16
-    static let inspectorCornerRadius: CGFloat = 18
-    static let sidebarTitlebarInset: CGFloat = 58
     static let currentViewStripHeight: CGFloat = 58
     static let rightInspectorMinWidth: CGFloat = 300
     static let rightInspectorIdealWidth: CGFloat = 340
     static let rightInspectorMaxWidth: CGFloat = 430
-
-    static var windowBackground: Color {
-        Color(nsColor: .textBackgroundColor)
-    }
 
     static var selectedRowBackground: Color {
         Color(nsColor: .selectedContentBackgroundColor).opacity(0.16)
@@ -41,7 +35,6 @@ struct MainWindowView: View {
                 .frame(minWidth: DesignTokens.detailMinWidth)
         }
         .navigationSplitViewStyle(.prominentDetail)
-        .containerBackground(DesignTokens.windowBackground, for: .window)
         .toolbar(removing: .sidebarToggle)
         .toolbar {
             ToolbarItem(placement: .navigation) {
@@ -67,16 +60,18 @@ struct MainWindowView: View {
                     .labelStyle(.iconOnly)
                     .disabled(model.currentScanURL == nil || model.isScanning)
                     .help("Rescan Current")
+                }
+            }
 
-                    if model.isScanning {
-                        Button {
-                            model.cancelScan()
-                        } label: {
-                            Label("Cancel Scan", systemImage: "xmark.circle")
-                        }
-                        .labelStyle(.iconOnly)
-                        .help("Cancel Scan")
+            if model.isScanning {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button {
+                        model.cancelScan()
+                    } label: {
+                        Label("Cancel Scan", systemImage: "xmark.circle")
                     }
+                    .labelStyle(.iconOnly)
+                    .help("Cancel Scan")
                 }
             }
         }
@@ -193,7 +188,6 @@ private struct TreemapDetailView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .background(DesignTokens.windowBackground)
     }
 }
 
@@ -206,7 +200,7 @@ private struct InspectorRevealButton: View {
         } label: {
             Label("Show Inspector", systemImage: "sidebar.trailing")
                 .labelStyle(.iconOnly)
-                .frame(width: 34, height: 34)
+                .frame(width: 44, height: 44)
         }
         .buttonStyle(.plain)
         .glassEffect(.regular, in: Circle())

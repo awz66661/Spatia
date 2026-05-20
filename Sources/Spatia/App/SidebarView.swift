@@ -96,7 +96,6 @@ struct SidebarView: View {
         }
         .scrollContentBackground(.hidden)
         .background(Color.clear)
-        .safeAreaPadding(.top, DesignTokens.sidebarTitlebarInset)
         .safeAreaPadding(.leading, 4)
     }
 }
@@ -207,16 +206,24 @@ private struct SourceActionRow: View {
     var title: String
     var systemImage: String
     var action: () -> Void
+    @State private var isHovered = false
 
     var body: some View {
         Button(action: action) {
             Label(title, systemImage: systemImage)
                 .lineLimit(1)
+                .padding(.horizontal, 8)
+                .frame(minHeight: 32)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .font(.callout)
+        .background {
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(isHovered ? Color.primary.opacity(0.08) : Color.clear)
+        }
+        .onHover { isHovered = $0 }
     }
 }
 

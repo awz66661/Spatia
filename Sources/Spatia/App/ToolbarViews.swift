@@ -37,8 +37,9 @@ struct BreadcrumbPathBar: View {
                                 .fontWeight(index == nodes.count - 1 ? .semibold : .regular)
                                 .lineLimit(1)
                                 .truncationMode(.middle)
-                                .padding(.horizontal, index == nodes.count - 1 ? 10 : 0)
-                                .padding(.vertical, index == nodes.count - 1 ? 4 : 0)
+                                .padding(.horizontal, index == nodes.count - 1 ? 10 : 8)
+                                .padding(.vertical, 4)
+                                .frame(minHeight: 28)
                                 .frame(maxWidth: index == nodes.count - 1 ? 240 : 140)
                                 .background {
                                     if index == nodes.count - 1 {
@@ -46,6 +47,7 @@ struct BreadcrumbPathBar: View {
                                             .fill(Color.accentColor.opacity(0.14))
                                     }
                                 }
+                                .contentShape(Capsule())
                         }
                         .buttonStyle(.plain)
                         .help(node.url?.path ?? node.name)

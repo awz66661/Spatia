@@ -53,7 +53,7 @@ struct RightInspectorView: View {
                 }
             }
         }
-        .listStyle(.sidebar)
+        .listStyle(.inset)
         .navigationTitle("Inspector")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
