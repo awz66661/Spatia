@@ -1,0 +1,47 @@
+# Manual Smoke Test
+
+Run this checklist before publishing a prerelease or after changing scanner, treemap, sidebar, or file-action behavior.
+
+## Local Checks
+
+```sh
+./Scripts/check-version.sh
+./Scripts/check-env.sh
+./Scripts/build-debug.sh
+./Scripts/test.sh
+./Scripts/benchmark-scanner.sh
+SKIP_CODESIGN=1 ./Scripts/package-dmg.sh
+```
+
+Review the benchmark output for every fixture. `firstSnapshotMilliseconds` should stay well below the full scan duration; large regressions mean the progressive scan path needs investigation before release.
+
+## Progressive Scanning
+
+- Scan a large local directory such as `~/Library`, `~/Downloads`, or a source checkout with build artifacts.
+- Confirm the treemap appears and grows before the full scan finishes.
+- Confirm the sidebar shows current path, file count, folder count, and scanned size while scanning.
+- Cancel during the scan and confirm the UI returns immediately to an idle state.
+- Rescan the same source and confirm the final counts and status are consistent with the completed scan.
+
+## Navigation And Discovery
+
+- Click large treemap tiles, use breadcrumbs, and use the Up toolbar button.
+- Open sidebar tabs for direct children, largest files, category usage, and search.
+- Search by filename, relative path fragment, file kind, and category.
+- Click a search or insight result and confirm the selected item is visible in the treemap path.
+- Hover treemap tiles and confirm the tooltip/status show name, size, and path.
+
+## Actions
+
+- Select a regular file and verify Quick Look, Reveal in Finder, Copy Path, and Move to Trash availability.
+- Use the treemap context menu for Enter, Quick Look, Reveal, Copy Path, and Move to Trash.
+- Use keyboard navigation: arrow keys move selection, Return enters a folder, Space opens Quick Look, Delete requests Move to Trash, and Esc clears selection.
+- Select an application package that was scanned as opaque and run Expand Package. Confirm children appear under that package without rescanning the whole source.
+- Try protected or high-risk paths and confirm destructive actions remain blocked or warned by policy.
+
+## Package Artifact
+
+- Mount the unsigned DMG from `dist`.
+- Launch `Spatia.app` from the mounted image or copied app bundle.
+- Repeat one small scan and one action smoke test.
+- Confirm any release notes mention the unsigned and not-notarized caveat.

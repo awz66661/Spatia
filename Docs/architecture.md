@@ -28,7 +28,9 @@ Spatia
 - `SquarifiedTreemapLayout` supports readability-first weighting and a SpaceSniffer-style alternating orientation policy.
 - `FileCategoryClassifier` maps scanner metadata, UTType hints, extensions, and protected paths into stable visual categories.
 - `FileTreeInsights` derives current-view largest-file and category summaries from immutable snapshots without changing scanner state.
+- Sidebar insight summaries are cached in `AppModel` by snapshot identity and current display root so large snapshots are not repeatedly folded during SwiftUI updates.
 - `MainWindowView` uses a native SwiftUI `NavigationSplitView` shell with the system sidebar toggle, a full-height material sidebar, and restrained glass only on content overlays such as the selected-item inspector.
+- `MainWindowView` is split into small SwiftUI files for the sidebar, inspector, toolbar, and detail shell; there is no extra MVVM layer.
 - `PathRiskPolicy` centralizes path risk classification for scanner flags, category classification, UI risk state, and trash safety decisions.
 - `MacActions` contains macOS-specific actions such as Quick Look, reveal in Finder, copy path, and selected-item Move to Trash.
 
@@ -47,9 +49,11 @@ SwiftUI NavigationSplitView shell
 
 ```text
 User chooses source
-  -> FileScanner scans selected directory
-  -> FileTreeSnapshot stores nodes and aggregate sizes
+  -> FileScanner emits ScanEvent values
+  -> ScanAccumulator folds events into FileTreeSnapshot updates
+  -> AppModel publishes throttled partial snapshots while scanning
   -> FileTreeInsights derives sidebar summaries for the current display root
+  -> FileTreeSearch derives current-snapshot search results for the current display root
   -> RecursiveTreemapBuilder chooses visible depth and child containment
   -> SquarifiedTreemapLayout converts siblings into readable-weighted tiles
   -> TreemapNSView draws tiles and handles hit testing
@@ -61,7 +65,11 @@ User chooses source
 
 Spatia defaults to allocated size because users usually care about disk usage rather than logical file length. The inspector shows both disk usage and file size.
 
-The current scanner is a Foundation-based implementation that recursively reads the selected directory, aggregates logical and allocated sizes, treats packages as opaque by default, collects unreadable path issues, and does not follow symlink directories. Package expansion should become an explicit user action.
+The scanner is a Foundation-based implementation that recursively reads the selected directory, aggregates logical and allocated sizes, treats packages as opaque by default, collects unreadable path issues, and does not follow symlink directories.
+
+`FileScanner.scanEvents(root:receive:)` is the single scanner engine. It emits `started`, `nodeDiscovered`, `directoryFinished`, `issue`, and `finished` events. `ScanAccumulator` is the single aggregation path from events to `FileTreeSnapshot`; `scan(root:)` is only the synchronous wrapper around the event pipeline.
+
+Package expansion is an explicit user action. The app scans the selected package with package expansion enabled, appends the package contents into the existing snapshot, updates ancestor sizes, and keeps existing node IDs stable.
 
 Actual recoverable space can differ from displayed allocated size on APFS because of clones, sparse files, compression, purgeable data, iCloud placeholders, local snapshots, and shared APFS container space. The UI must not promise exact recoverable space.
 
@@ -75,7 +83,6 @@ These benchmarks are coarse regression signals, not product performance guarante
 
 ## Near-Term Refactor Points
 
-- Replace one-shot scanning with progressive scan events.
-- Move scan aggregation into an actor when progressive updates start.
-- Add a render cache if nested redraw cost becomes visible during large scans.
-- Add package expansion as an explicit user action.
+- Stabilize performance thresholds for the large synthetic benchmark fixtures.
+- Add a small visual smoke suite if UI rendering starts to change frequently.
+- Add Developer ID signing and notarization before positioning releases as Gatekeeper-ready.

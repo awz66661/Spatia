@@ -87,7 +87,9 @@ shasum -a 256 --check "${DMG_PATH}.sha256"
 - Run `./Scripts/check-env.sh`.
 - Run `./Scripts/build-debug.sh`.
 - Run `./Scripts/test.sh`.
+- Run `./Scripts/benchmark-scanner.sh` and check for large regressions in scan duration or first snapshot latency.
 - Run `SKIP_CODESIGN=1 ./Scripts/package-dmg.sh`.
+- Complete the [manual smoke test](smoke-test.md).
 - Commit and push to `main`.
 - Wait for CI to pass on `main`.
 - Create an annotated tag, for example `git tag -a v0.1.1 -m "Spatia 0.1.1"`.

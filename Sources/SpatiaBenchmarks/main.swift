@@ -8,6 +8,8 @@ private struct BenchmarkRow: Encodable {
     var logicalBytes: Int64
     var allocatedBytes: Int64
     var durationMilliseconds: Double
+    var eventCount: Int
+    var firstSnapshotMilliseconds: Double?
     var issueCount: Int
 }
 
@@ -35,15 +37,17 @@ struct SpatiaBenchmarks {
             try fileManager.createDirectory(at: root, withIntermediateDirectories: true)
             try fixture.build(root)
 
-            let result = FileScanner(options: fixture.options).scan(root: root)
+            let run = try scanFixture(root: root, options: fixture.options)
             let row = BenchmarkRow(
                 fixture: fixture.name,
-                fileCount: result.summary.fileCount,
-                folderCount: result.summary.folderCount,
-                logicalBytes: result.summary.logicalBytes,
-                allocatedBytes: result.summary.allocatedBytes,
-                durationMilliseconds: result.summary.duration * 1_000,
-                issueCount: result.issues.count
+                fileCount: run.result.summary.fileCount,
+                folderCount: run.result.summary.folderCount,
+                logicalBytes: run.result.summary.logicalBytes,
+                allocatedBytes: run.result.summary.allocatedBytes,
+                durationMilliseconds: run.result.summary.duration * 1_000,
+                eventCount: run.eventCount,
+                firstSnapshotMilliseconds: run.firstSnapshotMilliseconds,
+                issueCount: run.result.issues.count
             )
 
             let data = try encoder.encode(row)
@@ -57,6 +61,7 @@ struct SpatiaBenchmarks {
 
 private enum BenchmarkError: Error {
     case invalidUTF8
+    case missingResult
 }
 
 private let fixtures: [BenchmarkFixture] = [
@@ -66,6 +71,12 @@ private let fixtures: [BenchmarkFixture] = [
     BenchmarkFixture(name: "wide-directory", options: ScanOptions()) { root in
         try buildWideDirectory(root: root, fileCount: 600, fileBytes: 128)
     },
+    BenchmarkFixture(name: "large-balanced-tree", options: ScanOptions()) { root in
+        try buildBalancedTree(root: root, depth: 4, fanout: 6, filesPerDirectory: 5, fileBytes: 64)
+    },
+    BenchmarkFixture(name: "large-wide-directory", options: ScanOptions()) { root in
+        try buildWideDirectory(root: root, fileCount: 5_000, fileBytes: 64)
+    },
     BenchmarkFixture(name: "package-opaque", options: ScanOptions(expandPackages: false)) { root in
         try buildPackageSet(root: root, packageCount: 20, filesPerPackage: 12, fileBytes: 192)
     },
@@ -73,6 +84,31 @@ private let fixtures: [BenchmarkFixture] = [
         try buildPackageSet(root: root, packageCount: 20, filesPerPackage: 12, fileBytes: 192)
     }
 ]
+
+private func scanFixture(root: URL, options: ScanOptions) throws -> (
+    result: ScanResult,
+    eventCount: Int,
+    firstSnapshotMilliseconds: Double?
+) {
+    var accumulator = ScanAccumulator()
+    var eventCount = 0
+    var firstSnapshotMilliseconds: Double?
+    let startedAt = Date()
+
+    FileScanner(options: options).scanEvents(root: root) { event in
+        eventCount += 1
+        accumulator.consume(event)
+
+        if firstSnapshotMilliseconds == nil, accumulator.snapshot != nil {
+            firstSnapshotMilliseconds = Date().timeIntervalSince(startedAt) * 1_000
+        }
+    }
+
+    guard let result = accumulator.result else {
+        throw BenchmarkError.missingResult
+    }
+    return (result, eventCount, firstSnapshotMilliseconds)
+}
 
 private func buildBalancedTree(
     root: URL,

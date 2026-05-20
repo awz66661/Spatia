@@ -25,8 +25,10 @@ It is a file space map, not a Mac cleaner. Scans are user initiated, results sta
 - Navigate into large folders with breadcrumbs.
 - Use sidebar insights to compare direct children, largest descendant files, and category usage in the current view.
 - Search the current view by name, path, kind, or category.
+- See partial results during large scans instead of waiting for the full scan to finish.
 - Inspect disk usage, logical size, kind, category, modified date, and path.
-- Quick Look files, reveal items in Finder, and copy paths.
+- Hover treemap tiles for name, size, and path; use mouse, keyboard, or context menu actions.
+- Quick Look files, reveal items in Finder, copy paths, and expand opaque packages on demand.
 - Move selected items to Trash after safety checks and confirmation.
 - Summarize unreadable locations without interrupting the scan.
 
@@ -112,6 +114,7 @@ The first release does not ask for Full Disk Access on launch. Users can scan Do
 
 - [Architecture](Docs/architecture.md)
 - [Release](Docs/release.md)
+- [Manual smoke test](Docs/smoke-test.md)
 - [Contributing](CONTRIBUTING.md)
 - [Security](SECURITY.md)
 
