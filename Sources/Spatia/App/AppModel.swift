@@ -75,6 +75,7 @@ final class AppModel: ObservableObject {
     private var activeSearchTask: Task<Void, Never>?
     private var derivedGeneration = 0
     private var searchGeneration = 0
+    private var fileActionGeneration = 0
     private var lastProgressiveDerivedRefresh = Date.distantPast
     private var searchIndexCache: SearchIndexCache?
     private var hoveredTreemapNodeID: NodeID?
@@ -291,6 +292,7 @@ final class AppModel: ObservableObject {
         scanTask?.cancel()
         scanCancellationSource?.cancel()
         cancelDerivedDataTasks()
+        invalidatePendingFileActions()
 
         let cancellationSource = ScanCancellationSource()
         scanCancellationSource = cancellationSource
@@ -384,6 +386,7 @@ final class AppModel: ObservableObject {
         scanTask?.cancel()
         scanCancellationSource?.cancel()
         cancelDerivedDataTasks()
+        invalidatePendingFileActions()
         scanTask = nil
         scanCancellationSource = nil
         isScanning = false
@@ -583,7 +586,9 @@ final class AppModel: ObservableObject {
         }
 
         statusText = "Moving \(displayName(for: node)) to Trash..."
+        let actionGeneration = beginFileAction()
         let result = await moveToTrash(url)
+        guard isCurrentFileAction(actionGeneration) else { return }
         handleTrashResult(result, nodeID: selectedID, nodeName: displayName(for: node))
     }
 
@@ -602,6 +607,7 @@ final class AppModel: ObservableObject {
         }
 
         statusText = "Expanding \(displayName(for: node))..."
+        let actionGeneration = beginFileAction()
         let scanExpandedPackage = scanExpandedPackage
         let preferences = scanPreferences
         let options = ScanOptions(
@@ -612,6 +618,7 @@ final class AppModel: ObservableObject {
         let expandedResult = await Task.detached(priority: .userInitiated) {
             scanExpandedPackage(url, options)
         }.value
+        guard isCurrentFileAction(actionGeneration) else { return }
 
         reconcileExpandedPackage(
             nodeID: selectedID,
@@ -750,6 +757,19 @@ final class AppModel: ObservableObject {
         canvasDerivedState = .empty
         searchState = .empty(query: searchQuery)
         lastProgressiveDerivedRefresh = Date.distantPast
+    }
+
+    private func beginFileAction() -> Int {
+        fileActionGeneration += 1
+        return fileActionGeneration
+    }
+
+    private func invalidatePendingFileActions() {
+        fileActionGeneration += 1
+    }
+
+    private func isCurrentFileAction(_ generation: Int) -> Bool {
+        generation == fileActionGeneration
     }
 
     private func canvasScopesToBuild() -> Set<CanvasDerivedScope> {

@@ -712,6 +712,66 @@ final class AppModelNavigationTests: XCTestCase {
         XCTAssertEqual(model.statusText, "Expanded Sample.app.")
     }
 
+    func testPendingPackageExpansionDoesNotMutateNewScanResult() async throws {
+        let model = AppModel()
+        let packageURL = URL(fileURLWithPath: "/tmp/root/Sample.app", isDirectory: true)
+        model.result = ScanResult(
+            snapshot: FileTreeSnapshot(
+                nodes: [
+                    FileNode(id: 0, parentID: nil, name: "root", url: URL(fileURLWithPath: "/tmp/root", isDirectory: true), kind: .directory, logicalSize: 100, allocatedSize: 100, children: [1]),
+                    FileNode(id: 1, parentID: 0, name: "Sample.app", url: packageURL, kind: .package, logicalSize: 100, allocatedSize: 100)
+                ],
+                rootID: 0
+            ),
+            summary: ScanSummary(rootURL: URL(fileURLWithPath: "/tmp/root", isDirectory: true), fileCount: 1, folderCount: 2, logicalBytes: 100, allocatedBytes: 100, duration: 1),
+            issues: []
+        )
+        model.displayRootID = 0
+        model.selectedID = 1
+
+        let newRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: newRoot, withIntermediateDirectories: true)
+        defer {
+            try? FileManager.default.removeItem(at: newRoot)
+        }
+        model.scanEvents = singleRootScanEvents()
+
+        let blockingScan = BlockingPackageScan(
+            result: ScanResult(
+                snapshot: FileTreeSnapshot(
+                    nodes: [
+                        FileNode(id: 0, parentID: nil, name: "Sample.app", url: packageURL, kind: .package, logicalSize: 120, allocatedSize: 120, children: [1]),
+                        FileNode(id: 1, parentID: 0, name: "Contents", url: packageURL.appendingPathComponent("Contents", isDirectory: true), kind: .directory, logicalSize: 120, allocatedSize: 120)
+                    ],
+                    rootID: 0
+                ),
+                summary: ScanSummary(rootURL: packageURL, fileCount: 0, folderCount: 2, logicalBytes: 120, allocatedBytes: 120, duration: 0),
+                issues: []
+            )
+        )
+        model.scanExpandedPackage = { _, _ in
+            blockingScan.scan()
+        }
+
+        let expandTask = Task {
+            await model.expandSelectedPackage()
+        }
+        let didStartExpansion = await blockingScan.waitUntilStarted()
+        XCTAssertTrue(didStartExpansion)
+
+        model.scan(newRoot)
+        await waitForScanResult(model)
+        XCTAssertEqual(model.result?.summary.rootURL.path, newRoot.path)
+
+        blockingScan.finish()
+        await expandTask.value
+
+        XCTAssertEqual(model.result?.summary.rootURL.path, newRoot.path)
+        XCTAssertNil(model.result?.snapshot[1])
+        XCTAssertEqual(model.statusText, "Scanned 0 files, 0 KB.")
+    }
+
     func testCopySelectedPathUsesSelectedURLAndUpdatesStatus() {
         let model = AppModel()
         model.result = ScanResult(
@@ -1426,6 +1486,47 @@ final class AppModelNavigationTests: XCTestCase {
         XCTAssertTrue(model.statusText.contains("partial failure"))
     }
 
+    func testPendingMoveToTrashDoesNotMutateNewScanResult() async throws {
+        let model = AppModel()
+        model.result = ScanResult(
+            snapshot: sidebarSnapshot(),
+            summary: ScanSummary(rootURL: URL(fileURLWithPath: "/tmp/root", isDirectory: true), fileCount: 2, folderCount: 3, logicalBytes: 100, allocatedBytes: 100, duration: 1),
+            issues: []
+        )
+        model.displayRootID = 0
+        model.selectedID = 3
+        model.confirmMoveToTrash = { _ in true }
+
+        let newRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: newRoot, withIntermediateDirectories: true)
+        defer {
+            try? FileManager.default.removeItem(at: newRoot)
+        }
+        model.scanEvents = singleRootScanEvents()
+
+        let moveGate = MoveToTrashGate()
+        model.moveToTrash = { _ in
+            await moveGate.move()
+        }
+
+        let moveTask = Task {
+            await model.moveSelectedItemToTrash()
+        }
+        await moveGate.waitUntilStarted()
+
+        model.scan(newRoot)
+        await waitForScanResult(model)
+        XCTAssertEqual(model.result?.summary.rootURL.path, newRoot.path)
+
+        await moveGate.finish(with: .moved(resultingURL: nil))
+        await moveTask.value
+
+        XCTAssertEqual(model.result?.summary.rootURL.path, newRoot.path)
+        XCTAssertNil(model.result?.snapshot[3])
+        XCTAssertEqual(model.statusText, "Scanned 0 files, 0 KB.")
+    }
+
     private func waitForScanResult(_ model: AppModel, timeout: TimeInterval = 2) async {
         let deadline = Date().addingTimeInterval(timeout)
         while model.result == nil && Date() < deadline {
@@ -1469,6 +1570,39 @@ final class AppModelNavigationTests: XCTestCase {
                 return
             }
             try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+    }
+
+    private func singleRootScanEvents() -> @Sendable (URL, ScanOptions, @escaping (ScanEvent) -> Void) -> Void {
+        { url, _, receive in
+            let root = url.standardizedFileURL
+            receive(.started(root: root, startedAt: Date()))
+            receive(
+                .nodeDiscovered(
+                    FileNode(
+                        id: 0,
+                        parentID: nil,
+                        name: root.lastPathComponent,
+                        url: root,
+                        kind: .directory,
+                        logicalSize: 0,
+                        allocatedSize: 0,
+                        scanState: .complete
+                    )
+                )
+            )
+            receive(
+                .finished(
+                    ScanSummary(
+                        rootURL: root,
+                        fileCount: 0,
+                        folderCount: 1,
+                        logicalBytes: 0,
+                        allocatedBytes: 0,
+                        duration: 0
+                    )
+                )
+            )
         }
     }
 
@@ -1559,6 +1693,92 @@ final class AppModelNavigationTests: XCTestCase {
             defer { lock.unlock() }
             recordedURL = url
             recordedOptions = options
+        }
+    }
+
+    private final class BlockingPackageScan: @unchecked Sendable {
+        private let state = BlockingPackageScanState()
+        private let release = DispatchSemaphore(value: 0)
+        private let result: ScanResult
+
+        init(result: ScanResult) {
+            self.result = result
+        }
+
+        func scan() -> ScanResult {
+            Task {
+                await state.markStarted()
+            }
+            release.wait()
+            return result
+        }
+
+        func waitUntilStarted() async -> Bool {
+            await withTaskGroup(of: Bool.self) { group in
+                group.addTask {
+                    await self.state.waitUntilStarted()
+                    return true
+                }
+                group.addTask {
+                    try? await Task.sleep(nanoseconds: 2_000_000_000)
+                    return false
+                }
+                let result = await group.next() ?? false
+                group.cancelAll()
+                return result
+            }
+        }
+
+        func finish() {
+            release.signal()
+        }
+    }
+
+    private actor BlockingPackageScanState {
+        private var started = false
+        private var continuations: [CheckedContinuation<Void, Never>] = []
+
+        func markStarted() {
+            started = true
+            let waitingContinuations = continuations
+            continuations = []
+            for continuation in waitingContinuations {
+                continuation.resume()
+            }
+        }
+
+        func waitUntilStarted() async {
+            if started { return }
+            await withCheckedContinuation { continuation in
+                continuations.append(continuation)
+            }
+        }
+    }
+
+    private actor MoveToTrashGate {
+        private var startedContinuation: CheckedContinuation<Void, Never>?
+        private var resultContinuation: CheckedContinuation<TrashActionResult, Never>?
+        private var hasStarted = false
+
+        func move() async -> TrashActionResult {
+            hasStarted = true
+            startedContinuation?.resume()
+            startedContinuation = nil
+            return await withCheckedContinuation { continuation in
+                resultContinuation = continuation
+            }
+        }
+
+        func waitUntilStarted() async {
+            if hasStarted { return }
+            await withCheckedContinuation { continuation in
+                startedContinuation = continuation
+            }
+        }
+
+        func finish(with result: TrashActionResult) {
+            resultContinuation?.resume(returning: result)
+            resultContinuation = nil
         }
     }
 }
