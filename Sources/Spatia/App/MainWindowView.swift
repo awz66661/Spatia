@@ -101,6 +101,7 @@ private struct TreemapDetailView: View {
                     snapshot: snapshot,
                     rootID: rootID,
                     expandedNodeIDs: model.expandedTreemapNodeIDs,
+                    highlightedNodeIDs: model.selectedPathNodeIDs,
                     selectedID: Binding(
                         get: { model.selectedID },
                         set: { model.select($0) }
@@ -130,6 +131,9 @@ private struct TreemapDetailView: View {
                         Task {
                             await model.moveSelectedItemToTrash()
                         }
+                    },
+                    onHover: { nodeID in
+                        model.hoverTreemapNode(nodeID)
                     },
                     onSyntheticOtherSelect: { size in
                         model.selectSyntheticOther(size: size)

@@ -6,6 +6,7 @@ struct TreemapCanvas: NSViewRepresentable {
     var snapshot: FileTreeSnapshot
     var rootID: NodeID
     var expandedNodeIDs: Set<NodeID>
+    var highlightedNodeIDs: Set<NodeID>
     @Binding var selectedID: NodeID?
     var onActivate: (NodeID) -> Void
     var onPreview: (NodeID) -> Void
@@ -13,6 +14,7 @@ struct TreemapCanvas: NSViewRepresentable {
     var onReveal: (NodeID) -> Void
     var onCopyPath: (NodeID) -> Void
     var onMoveToTrash: (NodeID) -> Void
+    var onHover: (NodeID?) -> Void
     var onSyntheticOtherSelect: (Int64) -> Void
 
     func makeNSView(context: Context) -> TreemapNSView {
@@ -24,6 +26,7 @@ struct TreemapCanvas: NSViewRepresentable {
         view.onReveal = onReveal
         view.onCopyPath = onCopyPath
         view.onMoveToTrash = onMoveToTrash
+        view.onHover = onHover
         view.onSyntheticOtherSelect = onSyntheticOtherSelect
         return view
     }
@@ -32,6 +35,7 @@ struct TreemapCanvas: NSViewRepresentable {
         nsView.snapshot = snapshot
         nsView.rootID = rootID
         nsView.expandedNodeIDs = expandedNodeIDs
+        nsView.highlightedNodeIDs = highlightedNodeIDs
         nsView.selectedID = selectedID
         nsView.onSelect = { selectedID = $0 }
         nsView.onActivate = onActivate
@@ -40,6 +44,7 @@ struct TreemapCanvas: NSViewRepresentable {
         nsView.onReveal = onReveal
         nsView.onCopyPath = onCopyPath
         nsView.onMoveToTrash = onMoveToTrash
+        nsView.onHover = onHover
         nsView.onSyntheticOtherSelect = onSyntheticOtherSelect
     }
 }
@@ -102,6 +107,10 @@ final class TreemapNSView: NSView {
         didSet { needsDisplay = true }
     }
 
+    var highlightedNodeIDs: Set<NodeID> = [] {
+        didSet { needsDisplay = true }
+    }
+
     var selectedID: NodeID? {
         didSet { needsDisplay = true }
     }
@@ -113,6 +122,7 @@ final class TreemapNSView: NSView {
     var onReveal: ((NodeID) -> Void)?
     var onCopyPath: ((NodeID) -> Void)?
     var onMoveToTrash: ((NodeID) -> Void)?
+    var onHover: ((NodeID?) -> Void)?
     var onSyntheticOtherSelect: ((Int64) -> Void)?
 
     private var renderedTiles: [Tile] = []
@@ -232,11 +242,11 @@ final class TreemapNSView: NSView {
 
     override func mouseMoved(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
-        hoveredTile = hitTester.hitTest(point: point, tiles: renderedTiles)
+        updateHover(hitTester.hitTest(point: point, tiles: renderedTiles))
     }
 
     override func mouseExited(with event: NSEvent) {
-        hoveredTile = nil
+        updateHover(nil)
     }
 
     override func keyDown(with event: NSEvent) {
@@ -313,6 +323,27 @@ final class TreemapNSView: NSView {
         } else {
             onSelect?(tile?.nodeID)
         }
+    }
+
+    private func updateHover(_ tile: Tile?) {
+        guard hoveredTile != tile else { return }
+        hoveredTile = tile
+        toolTip = tooltip(for: tile)
+        onHover?(tile?.nodeID)
+    }
+
+    private func tooltip(for tile: Tile?) -> String? {
+        guard let tile else { return nil }
+
+        var lines = [
+            tile.label,
+            ByteCount.string(tile.size)
+        ]
+        if tile.nodeID != syntheticOtherNodeID,
+           let path = snapshot?[tile.nodeID]?.url?.path {
+            lines.append(path)
+        }
+        return lines.joined(separator: "\n")
     }
 
     private func moveSelection(_ direction: KeyboardDirection) {
@@ -482,6 +513,9 @@ final class TreemapNSView: NSView {
 
         let isSelected = tile.nodeID == selectedID
         let isHovered = tile == hoveredTile
+        let isHighlightedPath = highlightedNodeIDs.contains(tile.nodeID)
+            && !isSelected
+            && tile.nodeID != syntheticOtherNodeID
         let color = fillColor(for: tile)
         let cornerRadius = min(CGFloat(5), max(1, min(rect.width, rect.height) * 0.08))
         let path = CGPath(roundedRect: rect, cornerWidth: cornerRadius, cornerHeight: cornerRadius, transform: nil)
@@ -497,6 +531,9 @@ final class TreemapNSView: NSView {
         } else if isHovered {
             strokeColor = .labelColor.withAlphaComponent(0.45)
             strokeWidth = 1.5
+        } else if isHighlightedPath {
+            strokeColor = .controlAccentColor.withAlphaComponent(0.7)
+            strokeWidth = 1.2
         } else {
             strokeColor = tile.depth == 0
                 ? NSColor.separatorColor.withAlphaComponent(0.72)

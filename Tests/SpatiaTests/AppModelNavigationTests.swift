@@ -576,6 +576,30 @@ final class AppModelNavigationTests: XCTestCase {
         XCTAssertEqual(model.expandedTreemapNodeIDs, [1])
     }
 
+    func testSelectedPathNodeIDsFollowSelectionWithinDisplayRoot() {
+        let model = AppModel()
+        model.result = ScanResult(
+            snapshot: sidebarSnapshot(),
+            summary: ScanSummary(
+                rootURL: URL(fileURLWithPath: "/tmp/root", isDirectory: true),
+                fileCount: 2,
+                folderCount: 3,
+                logicalBytes: 100,
+                allocatedBytes: 100,
+                duration: 1
+            ),
+            issues: []
+        )
+        model.displayRootID = 0
+        model.select(4)
+
+        XCTAssertEqual(model.selectedPathNodeIDs, [0, 1, 4])
+
+        model.displayRootID = 1
+
+        XCTAssertEqual(model.selectedPathNodeIDs, [1, 4])
+    }
+
     func testExpandedTreemapNodeIDsAccumulateAcrossSelections() {
         let model = AppModel()
         model.result = ScanResult(
@@ -693,6 +717,34 @@ final class AppModelNavigationTests: XCTestCase {
         model.select(nil)
 
         XCTAssertNil(model.selectedOtherDetail)
+    }
+
+    func testHoverTreemapNodeShowsSizePathAndRestoresPreviousStatus() {
+        let model = AppModel()
+        model.result = ScanResult(
+            snapshot: sidebarSnapshot(),
+            summary: ScanSummary(
+                rootURL: URL(fileURLWithPath: "/tmp/root", isDirectory: true),
+                fileCount: 2,
+                folderCount: 3,
+                logicalBytes: 100,
+                allocatedBytes: 100,
+                duration: 1
+            ),
+            issues: []
+        )
+        model.displayRootID = 0
+        model.statusText = "Ready"
+
+        model.hoverTreemapNode(4)
+
+        XCTAssertTrue(model.statusText.contains("medium.bin"))
+        XCTAssertTrue(model.statusText.contains(ByteCount.string(30)))
+        XCTAssertTrue(model.statusText.contains("/tmp/root/medium/medium.bin"))
+
+        model.hoverTreemapNode(nil)
+
+        XCTAssertEqual(model.statusText, "Ready")
     }
 
     func testEnterDirectoryClearsExpandedTreemapNodeIDs() {

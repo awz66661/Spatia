@@ -34,6 +34,8 @@ final class AppModel: ObservableObject {
     private var scanTask: Task<Void, Never>?
     private var scanCancellationSource: ScanCancellationSource?
     private var sidebarInsightCache: SidebarInsightCache?
+    private var hoveredTreemapNodeID: NodeID?
+    private var hoverStatusRestoreText: String?
     private let pathRiskPolicy = PathRiskPolicy()
     private let safetyPolicy = SafetyPolicy()
 
@@ -70,6 +72,13 @@ final class AppModel: ObservableObject {
             }
             return snapshot.breadcrumb(for: id).contains { $0.id == displayRoot.id }
         })
+    }
+
+    var selectedPathNodeIDs: Set<NodeID> {
+        guard let selectedID, let snapshot, let displayRoot else { return [] }
+        let path = snapshot.breadcrumb(for: selectedID)
+        guard let rootIndex = path.firstIndex(where: { $0.id == displayRoot.id }) else { return [] }
+        return Set(path.dropFirst(rootIndex).map(\.id))
     }
 
     var breadcrumb: [FileNode] {
@@ -255,6 +264,8 @@ final class AppModel: ObservableObject {
         syntheticOtherSelection = nil
         displayRootID = nil
         expandedTreemapNodeIDsStorage = []
+        hoveredTreemapNodeID = nil
+        hoverStatusRestoreText = nil
         currentScanURL = url
         statusText = "Scanning \(url.lastPathComponent.isEmpty ? url.path : url.lastPathComponent)..."
         let scanPreferences = scanPreferences
@@ -344,6 +355,8 @@ final class AppModel: ObservableObject {
         syntheticOtherSelection = nil
         displayRootID = nil
         expandedTreemapNodeIDsStorage = []
+        hoveredTreemapNodeID = nil
+        hoverStatusRestoreText = nil
 
         if let currentScanURL {
             statusText = "Cancelled scanning \(displayName(for: currentScanURL))."
@@ -415,6 +428,35 @@ final class AppModel: ObservableObject {
     func openInsightItem(_ id: NodeID) {
         guard id != syntheticOtherNodeID, snapshot?[id] != nil else { return }
         select(id)
+    }
+
+    func hoverTreemapNode(_ id: NodeID?) {
+        guard !isScanning else { return }
+
+        guard let id, id != syntheticOtherNodeID else {
+            if hoveredTreemapNodeID != nil, let hoverStatusRestoreText {
+                statusText = hoverStatusRestoreText
+            }
+            hoveredTreemapNodeID = nil
+            hoverStatusRestoreText = nil
+            return
+        }
+
+        guard hoveredTreemapNodeID != id else { return }
+        if hoveredTreemapNodeID == nil {
+            hoverStatusRestoreText = statusText
+        }
+        hoveredTreemapNodeID = id
+
+        guard let node = snapshot?[id] else { return }
+        var components = [
+            displayName(for: node),
+            ByteCount.string(node.allocatedSize)
+        ]
+        if let path = node.url?.path {
+            components.append(path)
+        }
+        statusText = components.joined(separator: " · ")
     }
 
     func quickLookSelected() {
