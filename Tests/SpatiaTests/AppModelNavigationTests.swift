@@ -640,6 +640,61 @@ final class AppModelNavigationTests: XCTestCase {
         await waitForScanResult(model)
     }
 
+    func testCancelScanStopsCurrentScanAndIgnoresLateResult() async throws {
+        let model = AppModel()
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer {
+            try? FileManager.default.removeItem(at: root)
+        }
+
+        model.scanRoot = { url, options in
+            while options.cancellationSource?.isCancelled == false {
+                Thread.sleep(forTimeInterval: 0.001)
+            }
+
+            return ScanResult(
+                snapshot: FileTreeSnapshot(
+                    nodes: [
+                        FileNode(
+                            id: 0,
+                            parentID: nil,
+                            name: url.lastPathComponent,
+                            url: url,
+                            kind: .directory,
+                            logicalSize: 1,
+                            allocatedSize: 1
+                        )
+                    ],
+                    rootID: 0
+                ),
+                summary: ScanSummary(
+                    rootURL: url,
+                    fileCount: 1,
+                    folderCount: 1,
+                    logicalBytes: 1,
+                    allocatedBytes: 1,
+                    duration: 0
+                ),
+                issues: []
+            )
+        }
+
+        model.scan(root)
+
+        XCTAssertTrue(model.isScanning)
+
+        model.cancelScan()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertFalse(model.isScanning)
+        XCTAssertNil(model.result)
+        XCTAssertNil(model.selectedID)
+        XCTAssertNil(model.displayRootID)
+        XCTAssertEqual(model.statusText, "Cancelled scanning \(root.lastPathComponent).")
+    }
+
     func testNavigateToBreadcrumbClearsExpandedTreemapNodeIDs() {
         let model = AppModel()
         model.result = ScanResult(

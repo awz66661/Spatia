@@ -19,6 +19,9 @@ final class AppModel: ObservableObject {
     var quickLookFile: (URL) -> QuickLookResult = MacActions.quickLook
     var revealInFinder: (URL) -> Void = MacActions.reveal
     var copyPathToPasteboard: (URL) -> Void = MacActions.copyPath
+    var scanRoot: @Sendable (URL, ScanOptions) -> ScanResult = { url, options in
+        FileScanner(options: options).scan(root: url)
+    }
 
     private var scanTask: Task<Void, Never>?
     private var scanCancellationSource: ScanCancellationSource?
@@ -216,12 +219,12 @@ final class AppModel: ObservableObject {
         currentScanURL = url
         statusText = "Scanning \(url.lastPathComponent.isEmpty ? url.path : url.lastPathComponent)..."
         let scanPreferences = scanPreferences
+        let scanRoot = scanRoot
 
         scanTask = Task {
             let options = scanPreferences.scanOptions(cancellationSource: cancellationSource)
-            let scanner = FileScanner(options: options)
             let scanResult = await Task.detached(priority: .userInitiated) {
-                scanner.scan(root: url)
+                scanRoot(url, options)
             }.value
 
             guard !Task.isCancelled, !cancellationSource.isCancelled, scanCancellationSource === cancellationSource else {
@@ -231,7 +234,30 @@ final class AppModel: ObservableObject {
             result = scanResult
             displayRootID = scanResult.snapshot.rootID
             isScanning = false
+            scanTask = nil
+            scanCancellationSource = nil
             statusText = "Scanned \(scanResult.summary.fileCount) files, \(ByteCount.string(scanResult.summary.allocatedBytes))."
+        }
+    }
+
+    func cancelScan() {
+        guard isScanning else { return }
+
+        scanTask?.cancel()
+        scanCancellationSource?.cancel()
+        scanTask = nil
+        scanCancellationSource = nil
+        isScanning = false
+        result = nil
+        selectedID = nil
+        syntheticOtherSelection = nil
+        displayRootID = nil
+        expandedTreemapNodeIDsStorage = []
+
+        if let currentScanURL {
+            statusText = "Cancelled scanning \(displayName(for: currentScanURL))."
+        } else {
+            statusText = "Scan cancelled."
         }
     }
 

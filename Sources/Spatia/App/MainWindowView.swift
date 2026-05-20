@@ -73,6 +73,18 @@ struct MainWindowView: View {
             }
 
             ToolbarItem(placement: .primaryAction) {
+                if model.isScanning {
+                    Button {
+                        model.cancelScan()
+                    } label: {
+                        Label("Cancel Scan", systemImage: "xmark.circle")
+                    }
+                    .labelStyle(.iconOnly)
+                    .help("Cancel Scan")
+                }
+            }
+
+            ToolbarItem(placement: .primaryAction) {
                 StatusPill(text: model.statusText, isScanning: model.isScanning)
             }
         }

@@ -25,6 +25,12 @@ struct SpatiaApp: App {
                 }
                 .keyboardShortcut("r", modifiers: [.command])
                 .disabled(model.currentScanURL == nil || model.isScanning)
+
+                Button("Cancel Scan") {
+                    model.cancelScan()
+                }
+                .keyboardShortcut(".", modifiers: [.command])
+                .disabled(!model.isScanning)
             }
 
             CommandMenu("Item") {
