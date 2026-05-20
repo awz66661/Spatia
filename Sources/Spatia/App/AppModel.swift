@@ -174,6 +174,7 @@ final class AppModel: ObservableObject {
         let cancellationSource = ScanCancellationSource()
         scanCancellationSource = cancellationSource
         isScanning = true
+        result = nil
         selectedID = nil
         displayRootID = nil
         expandedTreemapNodeIDsStorage = []

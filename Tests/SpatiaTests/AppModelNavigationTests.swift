@@ -459,6 +459,41 @@ final class AppModelNavigationTests: XCTestCase {
         XCTAssertFalse(model.isScanning)
     }
 
+    func testStartingNewScanClearsPreviousResultImmediately() async throws {
+        let model = AppModel()
+        model.result = ScanResult(
+            snapshot: sidebarSnapshot(),
+            summary: ScanSummary(
+                rootURL: URL(fileURLWithPath: "/tmp/root", isDirectory: true),
+                fileCount: 2,
+                folderCount: 3,
+                logicalBytes: 100,
+                allocatedBytes: 100,
+                duration: 1
+            ),
+            issues: []
+        )
+        model.displayRootID = 0
+        model.selectedID = 3
+
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer {
+            try? FileManager.default.removeItem(at: root)
+        }
+
+        model.scan(root)
+
+        XCTAssertTrue(model.isScanning)
+        XCTAssertNil(model.result)
+        XCTAssertNil(model.displayRootID)
+        XCTAssertNil(model.selectedID)
+        XCTAssertEqual(model.currentScanURL?.path, root.path)
+
+        await waitForScanResult(model)
+    }
+
     func testNavigateToBreadcrumbClearsExpandedTreemapNodeIDs() {
         let model = AppModel()
         model.result = ScanResult(

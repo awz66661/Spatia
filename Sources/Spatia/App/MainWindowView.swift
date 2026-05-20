@@ -374,9 +374,9 @@ private struct TreemapDetailView: View {
                 }
             } else {
                 ContentUnavailableView(
-                    "No Scan",
-                    systemImage: "square.grid.3x3",
-                    description: Text("Choose a folder to build a space map.")
+                    model.isScanning ? "Scanning" : "No Scan",
+                    systemImage: model.isScanning ? "arrow.triangle.2.circlepath" : "square.grid.3x3",
+                    description: Text(model.isScanning ? model.statusText : "Choose a folder to build a space map.")
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
