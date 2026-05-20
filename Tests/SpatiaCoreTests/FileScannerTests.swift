@@ -172,10 +172,8 @@ final class FileScannerTests: XCTestCase {
         let result = FileScanner(options: ScanOptions(expandPackages: false)).scan(root: fixture.rootURL)
         let root = try XCTUnwrap(result.snapshot.root)
         let package = try XCTUnwrap(fixture.child(named: "Sample.app", in: root, snapshot: result.snapshot))
-        guard package.kind == .package else {
-            throw XCTSkip("This platform did not classify .app directories as packages.")
-        }
 
+        XCTAssertEqual(package.kind, .package)
         XCTAssertEqual(package.logicalSize, 7)
         XCTAssertTrue(package.children.isEmpty)
         XCTAssertEqual(result.summary.fileCount, 1)
@@ -192,11 +190,9 @@ final class FileScannerTests: XCTestCase {
         let result = FileScanner(options: ScanOptions(expandPackages: true)).scan(root: fixture.rootURL)
         let root = try XCTUnwrap(result.snapshot.root)
         let package = try XCTUnwrap(fixture.child(named: "Sample.app", in: root, snapshot: result.snapshot))
-        guard package.kind == .package else {
-            throw XCTSkip("This platform did not classify .app directories as packages.")
-        }
         let contents = try XCTUnwrap(fixture.child(named: "Contents", in: package, snapshot: result.snapshot))
 
+        XCTAssertEqual(package.kind, .package)
         XCTAssertFalse(package.children.isEmpty)
         XCTAssertNotNil(fixture.child(named: "payload.dat", in: contents, snapshot: result.snapshot))
         XCTAssertEqual(result.summary.fileCount, 1)
