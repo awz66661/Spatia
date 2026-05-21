@@ -22,9 +22,9 @@ It is a file space map, not a Mac cleaner. Scans are user initiated, results sta
 
 - Scan Downloads, Desktop, Documents, Applications, Home, or a chosen folder.
 - Visualize disk usage with a recursive rectangular treemap.
-- Navigate into large folders with breadcrumbs.
-- Use sidebar insights to compare direct children, largest descendant files, and category usage in the current view.
-- Search the current view by name, path, kind, or category.
+- Navigate into large folders with the toolbar breadcrumb path and Up button.
+- Use the right inspector for selected-item details, largest descendant files, and category usage in the current view.
+- Search the scan or current view by name, path, kind, or category from the toolbar search field.
 - See partial results during large scans instead of waiting for the full scan to finish.
 - Inspect disk usage, logical size, kind, category, modified date, and path.
 - Hover treemap tiles for name, size, and path; use mouse, keyboard, or context menu actions.

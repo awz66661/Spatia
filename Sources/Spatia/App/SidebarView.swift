@@ -39,19 +39,15 @@ struct SidebarView: View {
 
                 SidebarGroup("Scan Options") {
                     VStack(alignment: .leading, spacing: 10) {
-                        Toggle(isOn: Binding(
+                        SidebarSwitchRow(title: "Hidden Files", systemImage: "eye", isOn: Binding(
                             get: { model.scanPreferences.includeHiddenFiles },
                             set: { model.setIncludeHiddenFiles($0) }
-                        )) {
-                            Label("Hidden Files", systemImage: "eye")
-                        }
+                        ))
 
-                        Toggle(isOn: Binding(
+                        SidebarSwitchRow(title: "Expand Packages", systemImage: "shippingbox", isOn: Binding(
                             get: { model.scanPreferences.expandPackages },
                             set: { model.setExpandPackages($0) }
-                        )) {
-                            Label("Expand Packages", systemImage: "shippingbox")
-                        }
+                        ))
 
                         DepthLimitControl()
 
@@ -77,6 +73,25 @@ struct SidebarView: View {
         .scrollContentBackground(.hidden)
         .background(Color.clear)
         .safeAreaPadding(.leading, 4)
+    }
+}
+
+private struct SidebarSwitchRow: View {
+    var title: String
+    var systemImage: String
+    @Binding var isOn: Bool
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Label(title, systemImage: systemImage)
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            Toggle(title, isOn: $isOn)
+                .labelsHidden()
+                .toggleStyle(.switch)
+                .controlSize(.small)
+        }
     }
 }
 

@@ -494,7 +494,6 @@ final class AppModel: ObservableObject {
 
     func focusSearch() {
         isSearchPresented = true
-        isRightInspectorVisible = true
     }
 
     func clearSearch() {

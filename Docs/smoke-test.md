@@ -25,11 +25,13 @@ Review the benchmark output for every fixture. `firstSnapshotMilliseconds` shoul
 
 ## Navigation And Discovery
 
-- Click large treemap tiles, use breadcrumbs, and use the Up toolbar button.
-- Open sidebar tabs for direct children, largest files, category usage, and search.
-- Search by filename, relative path fragment, file kind, and category.
-- Click a search or insight result and confirm the selected item is visible in the treemap path.
+- Click large treemap tiles, use the toolbar breadcrumb path, and use the Up toolbar button.
+- Toggle the right inspector and confirm selected-item details, largest files, and type usage update for the current view.
+- Search from the toolbar field by filename, relative path fragment, file kind, and category.
+- Confirm the search result panel opens below the search field and can switch between Scan and Current View scope.
+- Click a search or inspector result and confirm the selected item is visible in the treemap path.
 - Hover treemap tiles and confirm the tooltip/status show name, size, and path.
+- Confirm the sidebar scan options use switch controls for Hidden Files and Expand Packages.
 
 ## Actions
 

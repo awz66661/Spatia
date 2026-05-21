@@ -459,13 +459,13 @@ final class AppModelNavigationTests: XCTestCase {
         model.focusSearch()
 
         XCTAssertTrue(model.isSearchPresented)
-        XCTAssertTrue(model.isRightInspectorVisible)
+        XCTAssertFalse(model.isRightInspectorVisible)
         XCTAssertEqual(model.searchQuery, "large")
 
         model.clearSearch()
 
         XCTAssertTrue(model.isSearchPresented)
-        XCTAssertTrue(model.isRightInspectorVisible)
+        XCTAssertFalse(model.isRightInspectorVisible)
         XCTAssertEqual(model.searchQuery, "")
         XCTAssertTrue(model.searchResultSummaries.isEmpty)
     }

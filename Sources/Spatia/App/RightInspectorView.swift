@@ -4,10 +4,6 @@ import SwiftUI
 struct RightInspectorView: View {
     @EnvironmentObject private var model: AppModel
 
-    private var hasSearchQuery: Bool {
-        !model.searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
-
     var body: some View {
         Group {
             if model.snapshot == nil {
@@ -18,10 +14,6 @@ struct RightInspectorView: View {
                 )
             } else {
                 List {
-                    if hasSearchQuery {
-                        SearchResultsSection()
-                    }
-
                     Section("Selected Item") {
                         if let detail = model.selectedNodeDetail {
                             SelectedItemInspector(detail: detail)
@@ -62,39 +54,6 @@ struct RightInspectorView: View {
                     }
                 }
                 .listStyle(.inset)
-            }
-        }
-    }
-}
-
-private struct SearchResultsSection: View {
-    @EnvironmentObject private var model: AppModel
-
-    var body: some View {
-        Section("Search Results") {
-            Picker("Scope", selection: Binding(
-                get: { model.searchScope },
-                set: { model.searchScope = $0 }
-            )) {
-                ForEach(SearchScope.allCases) { scope in
-                    Text(scope.title).tag(scope)
-                }
-            }
-            .pickerStyle(.segmented)
-
-            if model.isSearchLoading {
-                InspectorLoadingRow(text: "Searching...")
-            } else if model.searchResultSummaries.isEmpty {
-                InspectorEmptyRow(text: model.searchScope == .scan ? "No matches in this scan." : "No matches in this view.")
-            } else {
-                ForEach(model.searchResultSummaries) { item in
-                    InspectorSearchRow(
-                        item: item,
-                        isSelected: model.selectedID == item.id
-                    ) {
-                        model.openSearchResult(item.id)
-                    }
-                }
             }
         }
     }
@@ -238,27 +197,6 @@ private struct SelectionInspectorActions: View {
             .help(detail.canMoveToTrash ? "Move to Trash" : detail.trashDisabledReason ?? "Move to Trash unavailable")
         }
         .controlSize(.small)
-    }
-}
-
-private struct InspectorSearchRow: View {
-    var item: SearchResultSummary
-    var isSelected: Bool
-    var action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            InspectorFileRowContent(
-                category: item.category,
-                name: item.name,
-                subtitle: "\(item.relativePath) - \(item.kind) - \(item.categoryName)",
-                sizeText: item.sizeText,
-                shareText: nil,
-                isSelected: isSelected
-            )
-        }
-        .buttonStyle(.plain)
-        .help(item.relativePath)
     }
 }
 

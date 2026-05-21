@@ -28,8 +28,9 @@ Spatia
 - `SquarifiedTreemapLayout` supports readability-first weighting and a SpaceSniffer-style alternating orientation policy.
 - `FileCategoryClassifier` maps scanner metadata, UTType hints, extensions, and protected paths into stable visual categories.
 - `FileTreeInsights` derives current-view largest-file and category summaries from immutable snapshots without changing scanner state.
-- Sidebar insight summaries are cached in `AppModel` by snapshot identity and current display root so large snapshots are not repeatedly folded during SwiftUI updates.
-- `MainWindowView` uses a native SwiftUI `NavigationSplitView` shell with the system sidebar toggle, a full-height material sidebar, and restrained glass only on content overlays such as the selected-item inspector.
+- Current-view and inspector summaries are cached in `AppModel` by snapshot identity and current display root so large snapshots are not repeatedly folded during SwiftUI updates.
+- `FileTreeSearch` builds cached search indexes for the scan root or current display root and feeds the toolbar search result panel.
+- `MainWindowView` uses a native SwiftUI `NavigationSplitView` shell with the system sidebar toggle, a toolbar breadcrumb path, a full-height material sidebar, and restrained Liquid Glass surfaces for the path and search results.
 - `MainWindowView` is split into small SwiftUI files for the sidebar, inspector, toolbar, and detail shell; there is no extra MVVM layer.
 - `PathRiskPolicy` centralizes path risk classification for scanner flags, category classification, UI risk state, and trash safety decisions.
 - `MacActions` contains macOS-specific actions such as Quick Look, reveal in Finder, copy path, and selected-item Move to Trash.
@@ -52,8 +53,8 @@ User chooses source
   -> FileScanner emits ScanEvent values
   -> ScanAccumulator folds events into FileTreeSnapshot updates
   -> AppModel publishes throttled partial snapshots while scanning
-  -> FileTreeInsights derives sidebar summaries for the current display root
-  -> FileTreeSearch derives current-snapshot search results for the current display root
+  -> FileTreeInsights derives right-inspector summaries for the current display root
+  -> FileTreeSearch derives toolbar search panel results for the scan root or current display root
   -> RecursiveTreemapBuilder chooses visible depth and child containment
   -> SquarifiedTreemapLayout converts siblings into readable-weighted tiles
   -> TreemapNSView draws tiles and handles hit testing

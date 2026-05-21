@@ -37,9 +37,10 @@ struct BreadcrumbPathBar: View {
                                 .fontWeight(index == nodes.count - 1 ? .semibold : .regular)
                                 .lineLimit(1)
                                 .truncationMode(.middle)
-                                .padding(.horizontal, index == nodes.count - 1 ? 10 : 8)
-                                .padding(.vertical, 4)
+                                .padding(.horizontal, index == nodes.count - 1 ? 12 : 4)
+                                .padding(.vertical, index == nodes.count - 1 ? 5 : 3)
                                 .frame(minHeight: 28)
+                                .frame(maxWidth: index == nodes.count - 1 ? 240 : 140)
                                 .background {
                                     if index == nodes.count - 1 {
                                         Capsule()
@@ -55,13 +56,17 @@ struct BreadcrumbPathBar: View {
                             Image(systemName: "chevron.right")
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
+                                .imageScale(.small)
                         }
                     }
                 }
             }
-            .padding(.horizontal, 13)
+            .padding(.horizontal, 12)
             .padding(.vertical, 5)
         }
+        .frame(minHeight: 36)
+        .glassEffect(.regular, in: Capsule())
+        .contentShape(Capsule())
     }
 
     private func displayName(for node: FileNode) -> String {
