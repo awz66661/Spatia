@@ -64,7 +64,6 @@ struct RightInspectorView: View {
                 .listStyle(.inset)
             }
         }
-        .navigationTitle("Inspector")
     }
 }
 
@@ -328,7 +327,8 @@ private struct InspectorFileRowContent: View {
                         .lineLimit(1)
                 }
             }
-            .frame(width: 66, alignment: .trailing)
+            .fixedSize(horizontal: true, vertical: false)
+            .layoutPriority(1)
         }
         .padding(.vertical, 5)
         .contentShape(Rectangle())
@@ -370,7 +370,8 @@ private struct InspectorCategoryRow: View {
                     .monospacedDigit()
                     .lineLimit(1)
             }
-            .frame(width: 66, alignment: .trailing)
+            .fixedSize(horizontal: true, vertical: false)
+            .layoutPriority(1)
         }
         .padding(.vertical, 5)
         .help("\(item.name): \(item.sizeText), \(item.shareText)")
@@ -382,20 +383,37 @@ private struct InspectorInfoRow: View {
     var value: String
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text(label)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .frame(width: 82, alignment: .leading)
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                labelText
+                Spacer(minLength: 8)
+                valueText
+            }
 
-            Text(value)
-                .font(.caption)
-                .fontWeight(.medium)
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .trailing)
+            VStack(alignment: .leading, spacing: 2) {
+                labelText
+                valueText
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
+    }
+
+    private var labelText: some View {
+        Text(label)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private var valueText: some View {
+        Text(value)
+            .font(.caption)
+            .fontWeight(.medium)
+            .lineLimit(1)
+            .truncationMode(.middle)
+            .textSelection(.enabled)
+            .layoutPriority(1)
     }
 }
 

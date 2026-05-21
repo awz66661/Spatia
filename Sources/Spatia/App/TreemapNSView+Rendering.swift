@@ -111,22 +111,27 @@ extension TreemapNSView {
             maxSize: mode == .containerTitle || tile.depth == 0 ? 12 : 11,
             weight: .medium
         )
+        let titleFont = NSFont.systemFont(ofSize: titleFontSize, weight: .medium)
+        let sizeFont = NSFont.systemFont(ofSize: 10, weight: .regular)
 
         let titleAttributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: titleFontSize, weight: .medium),
+            .font: titleFont,
             .foregroundColor: NSColor.labelColor,
             .paragraphStyle: paragraph
         ]
 
         let sizeAttributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 10, weight: .regular),
+            .font: sizeFont,
             .foregroundColor: NSColor.secondaryLabelColor,
             .paragraphStyle: paragraph
         ]
 
-        let titleHeight = drawSize ? 15 : min(labelRect.height, 15)
+        let titleHeight = min(labelRect.height, lineHeight(for: titleFont))
+        let sizeHeight = lineHeight(for: sizeFont)
+        let lineSpacing = max(1, titleHeight * 0.12)
+        let drawsSizeLine = drawSize && labelRect.height >= titleHeight + lineSpacing + sizeHeight
 
-        guard titleHeight >= 10 else { return }
+        guard titleHeight >= titleFont.xHeight else { return }
 
         NSGraphicsContext.saveGraphicsState()
         NSBezierPath(rect: labelRect).setClip()
@@ -136,14 +141,23 @@ extension TreemapNSView {
             withAttributes: titleAttributes
         )
 
-        if drawSize {
+        if drawsSizeLine {
             NSString(string: ByteCount.string(tile.size)).draw(
-                in: CGRect(x: labelRect.minX, y: labelRect.minY + 16, width: labelRect.width, height: 13),
+                in: CGRect(
+                    x: labelRect.minX,
+                    y: labelRect.minY + titleHeight + lineSpacing,
+                    width: labelRect.width,
+                    height: sizeHeight
+                ),
                 withAttributes: sizeAttributes
             )
         }
 
         NSGraphicsContext.restoreGraphicsState()
+    }
+
+    func lineHeight(for font: NSFont) -> CGFloat {
+        ceil(font.ascender - font.descender + font.leading)
     }
 
     func fittingFontSize(

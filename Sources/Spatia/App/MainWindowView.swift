@@ -2,16 +2,10 @@ import SpatiaCore
 import SwiftUI
 
 enum DesignTokens {
-    static let sidebarMinWidth: CGFloat = 190
-    static let sidebarIdealWidth: CGFloat = 220
-    static let sidebarMaxWidth: CGFloat = 260
     static let rowIconColumnWidth: CGFloat = 24
-    static let detailMinWidth: CGFloat = 600
     static let treemapInset: CGFloat = 10
     static let currentViewStripHeight: CGFloat = 52
-    static let rightInspectorMinWidth: CGFloat = 260
-    static let rightInspectorIdealWidth: CGFloat = 300
-    static let rightInspectorMaxWidth: CGFloat = 360
+    static let minimumWindowHeight: CGFloat = 700
 
     static var selectedRowBackground: Color {
         Color(nsColor: .selectedContentBackgroundColor).opacity(0.16)
@@ -25,14 +19,8 @@ struct MainWindowView: View {
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             SidebarView()
-                .navigationSplitViewColumnWidth(
-                    min: DesignTokens.sidebarMinWidth,
-                    ideal: DesignTokens.sidebarIdealWidth,
-                    max: DesignTokens.sidebarMaxWidth
-                )
         } detail: {
-            TreemapDetailView()
-                .frame(minWidth: DesignTokens.detailMinWidth)
+            DetailWorkspaceView()
                 .toolbar {
                     ToolbarItemGroup(placement: .primaryAction) {
                         ControlGroup {
@@ -76,19 +64,6 @@ struct MainWindowView: View {
                 }
         }
         .navigationSplitViewStyle(.prominentDetail)
-        .inspector(
-            isPresented: Binding(
-                get: { model.isRightInspectorVisible },
-                set: { model.isRightInspectorVisible = $0 }
-            )
-        ) {
-            RightInspectorView()
-                .inspectorColumnWidth(
-                    min: DesignTokens.rightInspectorMinWidth,
-                    ideal: DesignTokens.rightInspectorIdealWidth,
-                    max: DesignTokens.rightInspectorMaxWidth
-                )
-        }
         .searchable(
             text: Binding(
                 get: { model.searchQuery },
@@ -101,6 +76,54 @@ struct MainWindowView: View {
             placement: .toolbar,
             prompt: "Name, path, kind, or category"
         )
+    }
+}
+
+private struct DetailWorkspaceView: View {
+    @EnvironmentObject private var model: AppModel
+
+    var body: some View {
+        GeometryReader { proxy in
+            let layout = WorkspaceColumnLayout(
+                availableWidth: proxy.size.width,
+                showsInspector: model.isRightInspectorVisible
+            )
+
+            HStack(spacing: 0) {
+                TreemapDetailView()
+                    .frame(width: layout.canvasWidth, height: proxy.size.height)
+
+                if layout.showsInspector {
+                    Divider()
+
+                    RightInspectorView()
+                        .frame(width: layout.inspectorWidth, height: proxy.size.height)
+                        .background(Color(nsColor: .controlBackgroundColor))
+                }
+            }
+        }
+    }
+}
+
+private struct WorkspaceColumnLayout {
+    private static let inspectorTargetShare: CGFloat = 0.30
+    private static let inspectorMaximumShare: CGFloat = 0.42
+    private static let inspectorMaximumWidth: CGFloat = 360
+    private static let dividerWidth: CGFloat = 1
+
+    let availableWidth: CGFloat
+    let showsInspector: Bool
+
+    var inspectorWidth: CGFloat {
+        guard showsInspector else { return 0 }
+        let targetWidth = availableWidth * Self.inspectorTargetShare
+        let maximumWidth = min(Self.inspectorMaximumWidth, availableWidth * Self.inspectorMaximumShare)
+        return min(targetWidth, maximumWidth)
+    }
+
+    var canvasWidth: CGFloat {
+        guard showsInspector else { return availableWidth }
+        return max(0, availableWidth - inspectorWidth - Self.dividerWidth)
     }
 }
 

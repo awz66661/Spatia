@@ -86,18 +86,23 @@ struct CurrentViewStrip: View {
             .padding(.horizontal, 14)
             .padding(.bottom, 4)
         } else if !model.currentViewItems.isEmpty {
-            ScrollView(.horizontal, showsIndicators: false) {
-                LazyHStack(spacing: 8) {
-                    ForEach(model.currentViewItems) { item in
-                        CurrentViewItemButton(
-                            item: item,
-                            isSelected: model.selectedID == item.id
-                        ) {
-                            model.openCurrentViewItem(item.id)
+            GeometryReader { proxy in
+                let itemWidth = CurrentViewStripLayout.itemWidth(for: proxy.size.width)
+
+                ScrollView(.horizontal, showsIndicators: false) {
+                    LazyHStack(spacing: 8) {
+                        ForEach(model.currentViewItems) { item in
+                            CurrentViewItemButton(
+                                item: item,
+                                isSelected: model.selectedID == item.id,
+                                width: itemWidth
+                            ) {
+                                model.openCurrentViewItem(item.id)
+                            }
                         }
                     }
+                    .padding(.horizontal, 14)
                 }
-                .padding(.horizontal, 14)
             }
             .frame(height: DesignTokens.currentViewStripHeight)
             .padding(.bottom, 4)
@@ -105,9 +110,18 @@ struct CurrentViewStrip: View {
     }
 }
 
+private enum CurrentViewStripLayout {
+    static let targetVisibleItemCount: CGFloat = 4
+
+    static func itemWidth(for availableWidth: CGFloat) -> CGFloat {
+        max(1, availableWidth / targetVisibleItemCount)
+    }
+}
+
 private struct CurrentViewItemButton: View {
     var item: CurrentViewItemSummary
     var isSelected: Bool
+    var width: CGFloat
     var action: () -> Void
 
     var body: some View {
@@ -133,7 +147,8 @@ private struct CurrentViewItemButton: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding(.horizontal, 10)
-            .frame(width: 190, height: 46, alignment: .leading)
+            .frame(width: width, alignment: .leading)
+            .frame(minHeight: 46, alignment: .leading)
             .contentShape(Rectangle())
             .background {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)

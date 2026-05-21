@@ -40,7 +40,6 @@ struct BreadcrumbPathBar: View {
                                 .padding(.horizontal, index == nodes.count - 1 ? 10 : 8)
                                 .padding(.vertical, 4)
                                 .frame(minHeight: 28)
-                                .frame(maxWidth: index == nodes.count - 1 ? 240 : 140)
                                 .background {
                                     if index == nodes.count - 1 {
                                         Capsule()

@@ -53,24 +53,7 @@ struct SidebarView: View {
                             Label("Expand Packages", systemImage: "shippingbox")
                         }
 
-                        HStack(spacing: 8) {
-                            Label("Depth Limit", systemImage: "square.stack.3d.down.right")
-                                .lineLimit(1)
-                            Spacer(minLength: 0)
-                            Picker("Depth Limit", selection: Binding(
-                                get: { model.scanPreferences.maxDepth },
-                                set: { model.setMaxDepth($0) }
-                            )) {
-                                Text("No Limit").tag(Optional<Int>.none)
-                                Text("1 Level").tag(Optional(1))
-                                Text("2 Levels").tag(Optional(2))
-                                Text("3 Levels").tag(Optional(3))
-                                Text("5 Levels").tag(Optional(5))
-                            }
-                            .labelsHidden()
-                            .pickerStyle(.menu)
-                            .frame(width: 112)
-                        }
+                        DepthLimitControl()
 
                         Text("Options apply to the next scan.")
                             .font(.caption2)
@@ -224,6 +207,46 @@ private struct SourceActionRow: View {
     }
 }
 
+private struct DepthLimitControl: View {
+    @EnvironmentObject private var model: AppModel
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 8) {
+                label
+                Spacer(minLength: 8)
+                picker
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                label
+                picker
+            }
+        }
+    }
+
+    private var label: some View {
+        Label("Depth Limit", systemImage: "square.stack.3d.down.right")
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private var picker: some View {
+        Picker("Depth Limit", selection: Binding(
+            get: { model.scanPreferences.maxDepth },
+            set: { model.setMaxDepth($0) }
+        )) {
+            Text("No Limit").tag(Optional<Int>.none)
+            Text("1 Level").tag(Optional(1))
+            Text("2 Levels").tag(Optional(2))
+            Text("3 Levels").tag(Optional(3))
+            Text("5 Levels").tag(Optional(5))
+        }
+        .labelsHidden()
+        .pickerStyle(.menu)
+    }
+}
+
 private struct SidebarMetricRow: View {
     var label: String
     var value: String
@@ -235,9 +258,10 @@ private struct SidebarMetricRow: View {
             Spacer(minLength: 0)
             Text(value)
                 .fontWeight(.medium)
-                .frame(width: 88, alignment: .trailing)
                 .lineLimit(1)
                 .truncationMode(.middle)
+                .minimumScaleFactor(0.82)
+                .layoutPriority(1)
         }
         .font(.caption)
     }
