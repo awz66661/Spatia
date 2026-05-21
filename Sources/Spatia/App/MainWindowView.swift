@@ -36,7 +36,7 @@ struct MainWindowView: View {
         }
         .navigationSplitViewStyle(.prominentDetail)
         .toolbar {
-            ToolbarItemGroup(placement: .primaryAction) {
+            ToolbarItemGroup(placement: .navigation) {
                 ControlGroup {
                     ScanFolderButton()
 
