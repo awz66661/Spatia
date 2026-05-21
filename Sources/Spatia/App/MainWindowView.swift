@@ -2,16 +2,16 @@ import SpatiaCore
 import SwiftUI
 
 enum DesignTokens {
-    static let sidebarMinWidth: CGFloat = 210
-    static let sidebarIdealWidth: CGFloat = 235
-    static let sidebarMaxWidth: CGFloat = 280
+    static let sidebarMinWidth: CGFloat = 190
+    static let sidebarIdealWidth: CGFloat = 220
+    static let sidebarMaxWidth: CGFloat = 260
     static let rowIconColumnWidth: CGFloat = 24
-    static let detailMinWidth: CGFloat = 760
+    static let detailMinWidth: CGFloat = 600
     static let treemapInset: CGFloat = 10
     static let currentViewStripHeight: CGFloat = 52
-    static let rightInspectorMinWidth: CGFloat = 300
-    static let rightInspectorIdealWidth: CGFloat = 340
-    static let rightInspectorMaxWidth: CGFloat = 430
+    static let rightInspectorMinWidth: CGFloat = 260
+    static let rightInspectorIdealWidth: CGFloat = 300
+    static let rightInspectorMaxWidth: CGFloat = 360
 
     static var selectedRowBackground: Color {
         Color(nsColor: .selectedContentBackgroundColor).opacity(0.16)
