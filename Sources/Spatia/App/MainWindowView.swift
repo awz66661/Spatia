@@ -33,36 +33,36 @@ struct MainWindowView: View {
         } detail: {
             TreemapDetailView()
                 .frame(minWidth: DesignTokens.detailMinWidth)
+                .toolbar {
+                    ToolbarItemGroup(placement: .primaryAction) {
+                        ControlGroup {
+                            ScanFolderButton()
+
+                            Button {
+                                model.rescanCurrentSource()
+                            } label: {
+                                Label("Rescan", systemImage: "arrow.clockwise")
+                            }
+                            .labelStyle(.iconOnly)
+                            .disabled(model.currentScanURL == nil || model.isScanning)
+                            .help("Rescan Current")
+                        }
+                    }
+
+                    if model.isScanning {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button {
+                                model.cancelScan()
+                            } label: {
+                                Label("Cancel Scan", systemImage: "xmark.circle")
+                            }
+                            .labelStyle(.iconOnly)
+                            .help("Cancel Scan")
+                        }
+                    }
+                }
         }
         .navigationSplitViewStyle(.prominentDetail)
-        .toolbar {
-            ToolbarItemGroup(placement: .navigation) {
-                ControlGroup {
-                    ScanFolderButton()
-
-                    Button {
-                        model.rescanCurrentSource()
-                    } label: {
-                        Label("Rescan", systemImage: "arrow.clockwise")
-                    }
-                    .labelStyle(.iconOnly)
-                    .disabled(model.currentScanURL == nil || model.isScanning)
-                    .help("Rescan Current")
-                }
-            }
-
-            if model.isScanning {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button {
-                        model.cancelScan()
-                    } label: {
-                        Label("Cancel Scan", systemImage: "xmark.circle")
-                    }
-                    .labelStyle(.iconOnly)
-                    .help("Cancel Scan")
-                }
-            }
-        }
         .inspector(
             isPresented: Binding(
                 get: { model.isRightInspectorVisible && model.snapshot != nil },
