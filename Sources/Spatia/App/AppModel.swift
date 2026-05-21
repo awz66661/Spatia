@@ -23,7 +23,7 @@ final class AppModel: ObservableObject {
     @Published var statusText = "Choose a folder to scan."
     @Published var currentScanURL: URL?
     @Published var scanPreferences = ScanPreferences()
-    @Published var isRightInspectorVisible = true {
+    @Published var isRightInspectorVisible = false {
         didSet {
             guard oldValue != isRightInspectorVisible else { return }
             scheduleCanvasDerivedRefresh(force: true)

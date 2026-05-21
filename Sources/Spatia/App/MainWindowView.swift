@@ -65,7 +65,7 @@ struct MainWindowView: View {
         .navigationSplitViewStyle(.prominentDetail)
         .inspector(
             isPresented: Binding(
-                get: { model.isRightInspectorVisible && model.snapshot != nil },
+                get: { model.isRightInspectorVisible },
                 set: { model.isRightInspectorVisible = $0 }
             )
         ) {
@@ -146,16 +146,6 @@ private struct TreemapDetailView: View {
                         )
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .padding(DesignTokens.treemapInset)
-
-                        if !model.isRightInspectorVisible {
-                            HStack {
-                                Spacer(minLength: 0)
-                                InspectorRevealButton()
-                                    .padding(.trailing, 18)
-                                    .padding(.top, 12)
-                            }
-                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                        }
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
@@ -168,22 +158,5 @@ private struct TreemapDetailView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-    }
-}
-
-private struct InspectorRevealButton: View {
-    @EnvironmentObject private var model: AppModel
-
-    var body: some View {
-        Button {
-            model.isRightInspectorVisible = true
-        } label: {
-            Label("Show Inspector", systemImage: "sidebar.trailing")
-                .labelStyle(.iconOnly)
-                .frame(width: 44, height: 44)
-        }
-        .buttonStyle(.plain)
-        .glassEffect(.regular, in: Circle())
-        .help("Show Inspector")
     }
 }

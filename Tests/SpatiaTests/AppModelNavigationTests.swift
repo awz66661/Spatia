@@ -163,9 +163,9 @@ final class AppModelNavigationTests: XCTestCase {
         XCTAssertEqual(model.currentViewSummary?.folderCount, "2")
     }
 
-    func testRightInspectorIsVisibleByDefaultAndBuildsInsights() async {
+    func testRightInspectorIsHiddenByDefaultAndBuildsInsightsWhenVisible() async {
         let model = AppModel()
-        XCTAssertTrue(model.isRightInspectorVisible)
+        XCTAssertFalse(model.isRightInspectorVisible)
         model.result = ScanResult(
             snapshot: sidebarSnapshot(),
             summary: ScanSummary(
@@ -179,6 +179,14 @@ final class AppModelNavigationTests: XCTestCase {
             issues: []
         )
         model.displayRootID = 0
+
+        await waitForCanvasDerivedState(model) {
+            model.currentViewItems.count == 3
+        }
+        XCTAssertTrue(model.insightLargestFileItems.isEmpty)
+        XCTAssertTrue(model.insightCategoryUsageItems.isEmpty)
+
+        model.isRightInspectorVisible = true
 
         await waitForCanvasDerivedState(model) {
             model.insightLargestFileItems.count == 3 && !model.insightCategoryUsageItems.isEmpty

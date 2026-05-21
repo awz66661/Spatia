@@ -9,63 +9,62 @@ struct RightInspectorView: View {
     }
 
     var body: some View {
-        List {
-            if hasSearchQuery {
-                SearchResultsSection()
-            }
+        Group {
+            if model.snapshot == nil {
+                ContentUnavailableView(
+                    model.isScanning ? "Scanning" : "No Scan",
+                    systemImage: model.isScanning ? "arrow.triangle.2.circlepath" : "sidebar.trailing",
+                    description: Text(model.isScanning ? model.statusText : "Choose a folder to inspect file details.")
+                )
+            } else {
+                List {
+                    if hasSearchQuery {
+                        SearchResultsSection()
+                    }
 
-            Section("Selected Item") {
-                if let detail = model.selectedNodeDetail {
-                    SelectedItemInspector(detail: detail)
-                } else if let detail = model.selectedOtherDetail {
-                    OtherSmallFilesInspector(detail: detail)
-                } else {
-                    InspectorEmptyRow(text: "Select a tile to inspect it.")
-                }
-            }
+                    Section("Selected Item") {
+                        if let detail = model.selectedNodeDetail {
+                            SelectedItemInspector(detail: detail)
+                        } else if let detail = model.selectedOtherDetail {
+                            OtherSmallFilesInspector(detail: detail)
+                        } else {
+                            InspectorEmptyRow(text: "Select a tile to inspect it.")
+                        }
+                    }
 
-            Section("Largest Files") {
-                if model.isCanvasScopeLoading(.largestFiles) {
-                    InspectorLoadingRow(text: "Loading large files...")
-                } else if model.insightLargestFileItems.isEmpty {
-                    InspectorEmptyRow(text: "No sizeable files in this view.")
-                } else {
-                    ForEach(model.insightLargestFileItems) { item in
-                        InspectorInsightFileRow(
-                            item: item,
-                            isSelected: model.selectedID == item.id
-                        ) {
-                            model.openInsightItem(item.id)
+                    Section("Largest Files") {
+                        if model.isCanvasScopeLoading(.largestFiles) {
+                            InspectorLoadingRow(text: "Loading large files...")
+                        } else if model.insightLargestFileItems.isEmpty {
+                            InspectorEmptyRow(text: "No sizeable files in this view.")
+                        } else {
+                            ForEach(model.insightLargestFileItems) { item in
+                                InspectorInsightFileRow(
+                                    item: item,
+                                    isSelected: model.selectedID == item.id
+                                ) {
+                                    model.openInsightItem(item.id)
+                                }
+                            }
+                        }
+                    }
+
+                    Section("Type Usage") {
+                        if model.isCanvasScopeLoading(.typeUsage) {
+                            InspectorLoadingRow(text: "Loading type usage...")
+                        } else if model.insightCategoryUsageItems.isEmpty {
+                            InspectorEmptyRow(text: "No type usage in this view.")
+                        } else {
+                            ForEach(model.insightCategoryUsageItems) { item in
+                                InspectorCategoryRow(item: item)
+                            }
                         }
                     }
                 }
-            }
-
-            Section("Type Usage") {
-                if model.isCanvasScopeLoading(.typeUsage) {
-                    InspectorLoadingRow(text: "Loading type usage...")
-                } else if model.insightCategoryUsageItems.isEmpty {
-                    InspectorEmptyRow(text: "No type usage in this view.")
-                } else {
-                    ForEach(model.insightCategoryUsageItems) { item in
-                        InspectorCategoryRow(item: item)
-                    }
-                }
+                .listStyle(.inset)
             }
         }
-        .listStyle(.inset)
         .navigationTitle("Inspector")
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button {
-                    model.isRightInspectorVisible = false
-                } label: {
-                    Label("Hide Inspector", systemImage: "sidebar.trailing")
-                }
-                .labelStyle(.iconOnly)
-                .help("Hide Inspector")
-            }
-        }
     }
 }
 
