@@ -10,65 +10,40 @@
 [![CI](https://img.shields.io/badge/CI-workflow%20configured-informational)](.github/workflows/ci.yml)
 [![Version](https://img.shields.io/badge/version-see%20VERSION-lightgrey)](VERSION)
 
-Spatia is a native macOS disk space visualizer built around a SpaceSniffer-style treemap.
+Spatia is a native macOS disk space visualizer built around a SpaceSniffer-style treemap. It helps you inspect where local disk space is being used without background indexing, telemetry, automatic cleanup, or permanent deletion.
 
-It is a file space map, not a Mac cleaner. Scans are user initiated, results stay local, and the app does not run telemetry, background indexing, automatic cleanup, or permanent deletion.
+Spatia is a file space map, not a Mac cleaner. Scans are explicit, user initiated, and kept local.
 
-<p align="center">
-  <img src="Docs/Screenshots/spatia-dark.png" alt="Spatia showing a disk usage treemap in dark mode">
-</p>
-
-## Features
+## Core Capabilities
 
 - Scan Downloads, Desktop, Documents, Applications, Home, or a chosen folder.
 - Visualize disk usage with a recursive rectangular treemap.
 - Navigate into large folders with the toolbar breadcrumb path and Up button.
-- Use the right inspector for selected-item details, largest descendant files, and category usage in the current view.
 - Search the scan or current view by name, path, kind, or category from the toolbar search field.
+- Use the right inspector for selected-item details, largest descendant files, and category usage in the current view.
 - See partial results during large scans instead of waiting for the full scan to finish.
-- Inspect disk usage, logical size, kind, category, modified date, and path.
 - Hover treemap tiles for name, size, and path; use mouse, keyboard, or context menu actions.
 - Quick Look files, reveal items in Finder, copy paths, and expand opaque packages on demand.
 - Move selected items to Trash after safety checks and confirmation.
 - Summarize unreadable locations without interrupting the scan.
 
-## Screenshots
-
-Spatia follows the system appearance and works in light mode as well.
-
-<p align="center">
-  <img src="Docs/Screenshots/spatia-light.png" alt="Spatia showing a disk usage treemap in light mode">
-</p>
-
-## Status
-
-Spatia is pre-1.0 macOS software.
-
-- Minimum macOS: 26.
-- Current version: see [VERSION](VERSION).
-- Distribution target: GitHub Releases.
-- Notarization: deferred for early releases.
-- App Store: not planned for the first phase.
-- Deletion: limited to selected-item Move to Trash; permanent deletion and bulk deletion are not implemented.
-
-## Product Boundaries
-
-Spatia is deliberately a visual explorer, not a Mac cleaner.
+## Safety Boundaries
 
 - Show and explain disk usage before offering actions.
 - Keep filesystem access explicit and user initiated.
 - Use safe macOS actions first: Quick Look, Reveal in Finder, Copy Path, and Move to Trash.
 - Limit deletion to one selected item, only after safety checks and confirmation.
-- Summarize inaccessible locations without pressuring the user to grant broad permissions.
 - Avoid cleanup recommendations, system optimization claims, background indexing, telemetry, cloud sync, permanent deletion, and automatic cleanup.
+
+## Requirements
+
+- macOS 26 or newer.
+- Xcode 26 or newer recommended.
+- Swift 6.2 or newer.
 
 ## Build From Source
 
-Requirements:
-
-- macOS 26 or newer
-- Xcode 26 or newer recommended
-- Swift 6.2 or newer
+Run the local checks:
 
 ```sh
 ./Scripts/check-version.sh
@@ -77,14 +52,21 @@ Requirements:
 ./Scripts/test.sh
 ```
 
-Create local ad-hoc signed artifacts:
+Open `Package.swift` in Xcode for native UI work.
+
+## Packaging
+
+Create a local ad-hoc signed app bundle:
 
 ```sh
 ./Scripts/package-app.sh
-./Scripts/package-dmg.sh
 ```
 
-Open `Package.swift` in Xcode for native UI work.
+Create a local ad-hoc signed DMG:
+
+```sh
+./Scripts/package-dmg.sh
+```
 
 Release builds are created from version tags. Pushes to `main` run CI and packaging smoke tests only; pushing a tag such as `v0.1.0` creates a draft prerelease with the ad-hoc signed DMG and checksum attached.
 
