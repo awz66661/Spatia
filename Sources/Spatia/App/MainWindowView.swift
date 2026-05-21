@@ -60,6 +60,19 @@ struct MainWindowView: View {
                             .help("Cancel Scan")
                         }
                     }
+
+                    ToolbarItem(placement: .primaryAction) {
+                        Button {
+                            model.isRightInspectorVisible.toggle()
+                        } label: {
+                            Label(
+                                model.isRightInspectorVisible ? "Hide Inspector" : "Show Inspector",
+                                systemImage: "sidebar.trailing"
+                            )
+                        }
+                        .labelStyle(.iconOnly)
+                        .help(model.isRightInspectorVisible ? "Hide Inspector" : "Show Inspector")
+                    }
                 }
         }
         .navigationSplitViewStyle(.prominentDetail)
