@@ -70,6 +70,17 @@ Create a local ad-hoc signed DMG:
 
 Release builds are created from version tags. Pushes to `main` run CI and packaging smoke tests only; pushing a tag such as `v0.1.0` creates a draft prerelease with the ad-hoc signed DMG and checksum attached.
 
+## Opening Prerelease Builds
+
+Early GitHub release artifacts are ad-hoc signed and not notarized. macOS Gatekeeper may block the first launch because Apple has not checked the app or associated it with an identified Developer ID.
+
+Only override Gatekeeper for Spatia builds you trust and downloaded from this repository. For prerelease testing, use one of these macOS-supported override paths:
+
+- Try opening the app once, then go to System Settings -> Privacy & Security -> Security and choose Open Anyway.
+- In Finder, Control-click or right-click the app, choose Open, then confirm Open in the warning dialog if macOS offers it.
+
+Do not globally disable Gatekeeper. Public, Gatekeeper-friendly distribution requires Developer ID signing, notarization, and stapling, which are not active yet.
+
 ## Current Limitations
 
 - Early release artifacts are ad-hoc signed and not notarized.
