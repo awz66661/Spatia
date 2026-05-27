@@ -44,6 +44,8 @@ Review the benchmark output for every fixture. `firstSnapshotMilliseconds` shoul
 ## Package Artifact
 
 - Mount the ad-hoc signed DMG from `dist`.
+- Confirm the Finder window shows the installer background with "Drag Spatia to Applications".
+- Confirm `Spatia.app` and `Applications` are positioned correctly and the app can be dragged into Applications.
 - Launch `Spatia.app` from the mounted image or copied app bundle.
 - Repeat one small scan and one action smoke test.
 - Confirm any release notes mention the ad-hoc signed and not-notarized caveat.

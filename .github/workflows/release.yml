@@ -47,8 +47,10 @@ jobs:
           hdiutil attach "${DMG_PATH}" -readonly -nobrowse -mountroot "${MOUNT_ROOT}"
           VOLUME_PATH="$(find "${MOUNT_ROOT}" -mindepth 1 -maxdepth 1 -type d | head -n 1)"
           test -n "${VOLUME_PATH}"
-          test -d "${VOLUME_PATH}"/Spatia-*.app
+          test -d "${VOLUME_PATH}/Spatia.app"
           test -L "${VOLUME_PATH}/Applications"
+          test -f "${VOLUME_PATH}/.background/background.png"
+          test -f "${VOLUME_PATH}/.DS_Store"
           hdiutil detach "${VOLUME_PATH}"
 
           shasum -a 256 --check "${DMG_PATH}.sha256"

@@ -68,7 +68,7 @@ dist/Spatia-X.Y.Z.dmg
 dist/Spatia-X.Y.Z.dmg.sha256
 ```
 
-The DMG contains the versioned app bundle and an `Applications` symlink.
+The DMG file name is versioned, but the mounted installer window contains `Spatia.app` and an `Applications` symlink. Keep the in-DMG app name unversioned so users install a normal `Spatia.app` bundle.
 
 ## Package Verification
 
