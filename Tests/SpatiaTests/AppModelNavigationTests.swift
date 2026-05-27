@@ -1379,6 +1379,59 @@ final class AppModelNavigationTests: XCTestCase {
         XCTAssertTrue(detail?.trashDisabledReason?.contains("home folder") == true)
     }
 
+    func testFailedScanNodeCannotMoveToTrash() async {
+        let model = AppModel()
+        model.result = ScanResult(
+            snapshot: FileTreeSnapshot(
+                nodes: [
+                    FileNode(
+                        id: 0,
+                        parentID: nil,
+                        name: "root",
+                        url: URL(fileURLWithPath: "/tmp/root", isDirectory: true),
+                        kind: .directory,
+                        logicalSize: 0,
+                        allocatedSize: 0,
+                        children: [1]
+                    ),
+                    FileNode(
+                        id: 1,
+                        parentID: 0,
+                        name: "metadata-fails.dat",
+                        url: URL(fileURLWithPath: "/tmp/root/metadata-fails.dat"),
+                        kind: .other,
+                        logicalSize: 0,
+                        allocatedSize: 0,
+                        scanState: .failed
+                    )
+                ],
+                rootID: 0
+            ),
+            summary: ScanSummary(rootURL: URL(fileURLWithPath: "/tmp/root", isDirectory: true), fileCount: 0, folderCount: 1, logicalBytes: 0, allocatedBytes: 0, duration: 0),
+            issues: []
+        )
+        model.displayRootID = 0
+        model.selectedID = 1
+
+        var didAskForConfirmation = false
+        var didMoveToTrash = false
+        model.confirmMoveToTrash = { _ in
+            didAskForConfirmation = true
+            return true
+        }
+        model.moveToTrash = { _ in
+            didMoveToTrash = true
+            return .moved(resultingURL: nil)
+        }
+
+        await model.moveSelectedItemToTrash()
+
+        XCTAssertFalse(didAskForConfirmation)
+        XCTAssertFalse(didMoveToTrash)
+        XCTAssertEqual(model.selectedNodeDetail?.canMoveToTrash, false)
+        XCTAssertTrue(model.statusText.contains("could not be fully scanned"))
+    }
+
     func testMoveSelectedItemToTrashConfirmsAndReconcilesSnapshot() async {
         let model = AppModel()
         model.result = ScanResult(

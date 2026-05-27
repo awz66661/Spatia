@@ -66,6 +66,25 @@ final class SafetyPolicyTests: XCTestCase {
         XCTAssertEqual(decision, .allowed)
     }
 
+    func testBlocksNodesThatWereNotFullyScanned() {
+        let policy = policy()
+        let url = home.appendingPathComponent("Downloads/unreadable.dat")
+        for scanState in [ScanState.scanning, .skipped, .failed] {
+            let node = FileNode(
+                id: 1,
+                parentID: 0,
+                name: "unreadable.dat",
+                url: url,
+                kind: .other,
+                scanState: scanState
+            )
+
+            let decision = policy.trashDecision(for: node)
+
+            XCTAssertTrue(decision.isBlocked, "Expected \(scanState) to be blocked.")
+        }
+    }
+
     func testBlocksImmutableFiles() {
         let decision = policy().trashDecision(
             for: home.appendingPathComponent("Downloads/locked.dat"),

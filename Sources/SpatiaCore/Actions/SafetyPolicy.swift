@@ -8,7 +8,11 @@ public struct SafetyPolicy: Sendable {
     }
 
     public func trashDecision(for node: FileNode) -> TrashDecision {
-        trashDecision(
+        if let reason = blockReason(for: node.scanState) {
+            return .blocked(reason: reason)
+        }
+
+        return trashDecision(
             for: node.url,
             name: node.name,
             kind: node.kind,
@@ -43,6 +47,19 @@ public struct SafetyPolicy: Sendable {
         }
 
         return warnings.isEmpty ? .allowed : .needsConfirmation(warnings: warnings)
+    }
+
+    private func blockReason(for scanState: ScanState) -> String? {
+        switch scanState {
+        case .complete:
+            return nil
+        case .scanning:
+            return "This item is still being scanned, so Spatia will not move it to Trash."
+        case .skipped:
+            return "This item was skipped during scanning, so Spatia will not move it to Trash."
+        case .failed:
+            return "This item could not be fully scanned, so Spatia will not move it to Trash."
+        }
     }
 }
 
